@@ -58,13 +58,11 @@ const els = {
   smoothingValue: $('smoothing-value'),
   showTips: $('show-tips'),
   mirror: $('mirror'),
-  preview: $('preview'),
   reset: $('reset'),
 };
 
 const settings = { ...DEFAULTS, ...loadSettings() };
 let locked = false;
-let preview = false;
 let renderer = null;
 let tracker = null;
 let smoothedQuad = null;
@@ -187,10 +185,6 @@ function wireUi() {
     smoothedQuad = null;
     saveSettings();
   });
-  els.preview.addEventListener('change', () => {
-    preview = els.preview.checked;
-  });
-
   els.reset.addEventListener('click', () => {
     Object.assign(settings, DEFAULTS);
     syncUiFromSettings();
@@ -291,15 +285,6 @@ async function init() {
 // Per-frame work
 // ---------------------------------------------------------------------------
 
-function previewQuad(width, height) {
-  return [
-    { x: width * 0.25, y: height * 0.22 },
-    { x: width * 0.72, y: height * 0.18 },
-    { x: width * 0.78, y: height * 0.8 },
-    { x: width * 0.22, y: height * 0.74 },
-  ];
-}
-
 /** Turn an ordered pixel-space quad into shader-ready homographies and a grid size. */
 function buildRegion(quad, width, height) {
   const size = quadSize(quad);
@@ -347,9 +332,7 @@ function loop(now) {
 
   let region = null;
   let hintText = '';
-  if (preview) {
-    region = buildRegion(previewQuad(width, height), width, height);
-  } else if (locked) {
+  if (locked) {
     // Rebuild from the frozen corners so the customizer still applies.
     region = lastRegion ? buildRegion(lastRegion.quad, width, height) : null;
   } else if (tips.length === 4) {
@@ -412,9 +395,7 @@ function drawOverlay(tips, region, width, height) {
     ctx.closePath();
     ctx.lineWidth = 1.5 * scale;
     ctx.strokeStyle = locked ? 'rgba(255, 196, 0, 0.9)' : 'rgba(255, 255, 255, 0.55)';
-    ctx.setLineDash(preview ? [8 * scale, 6 * scale] : []);
     ctx.stroke();
-    ctx.setLineDash([]);
   }
   tips.forEach((p, i) => {
     const isThumb = i % 2 === 0;

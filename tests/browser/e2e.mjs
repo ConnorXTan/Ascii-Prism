@@ -128,34 +128,23 @@ async function buildHandsVideo(browser) {
 
 const server = await startServer();
 try {
-  // Part 1: synthetic camera pattern, preview region, customizer.
+  // Part 1: synthetic camera pattern, no hands, customizer.
   let browser = await chromium.launch({ channel: 'chrome', headless: true, args: CHROME_ARGS });
   {
     const { page, errors } = await openApp(browser);
-    let s = await readStatus(page);
+    const s = await readStatus(page);
     check('model loads and reports Tracking', s.model === 'Tracking', s.model);
     check('no banner error', s.banner === null, s.banner ?? '');
     check('no region without hands', s.grid === '–', s.grid);
-
-    await page.check('#preview');
-    await page.waitForTimeout(600);
-    s = await readStatus(page);
-    check('preview region renders a grid', /^80 × \d+$/.test(s.grid), s.grid);
+    check('hint asks for both hands', /both hands/i.test(await page.textContent('#hint')));
 
     await page.selectOption('#charset-preset', 'blocks');
-    await page.fill('#columns', '40');
-    await page.dispatchEvent('#columns', 'input');
-    await page.waitForTimeout(400);
-    s = await readStatus(page);
     const count = await page.textContent('#charset-count');
     check('charset preset applies', count === '5', count);
-    check('column count applies', /^40 × \d+$/.test(s.grid), s.grid);
-
-    await page.check('#invert');
     await page.keyboard.press('l');
-    check('lock hotkey works after clicking a checkbox', (await page.textContent('#lock')) === 'Unlock region');
+    check('lock does nothing without a region', (await page.textContent('#lock')) === 'Lock region');
     check('no console errors (pattern camera)', errors.length === 0, errors.join(' | '));
-    await page.screenshot({ path: path.join(CACHE, 'preview.png') });
+    await page.screenshot({ path: path.join(CACHE, 'no-hands.png') });
   }
 
   // Part 2: real hand tracking on a photo of two hands.
@@ -168,9 +157,18 @@ try {
   });
   {
     const { page, errors } = await openApp(browser);
-    const s = await readStatus(page);
+    let s = await readStatus(page);
     check('both hands detected on the sample photo', s.hands === 2, `hands=${s.hands}`);
-    check('fingertips produce an ASCII region', /^\d+ × \d+$/.test(s.grid), s.grid);
+    check('fingertips produce an ASCII region', /^80 × \d+$/.test(s.grid), s.grid);
+
+    await page.fill('#columns', '40');
+    await page.dispatchEvent('#columns', 'input');
+    await page.check('#invert');
+    await page.waitForTimeout(400);
+    s = await readStatus(page);
+    check('column count applies', /^40 × \d+$/.test(s.grid), s.grid);
+    await page.keyboard.press('l');
+    check('lock hotkey works after clicking a checkbox', (await page.textContent('#lock')) === 'Unlock region');
     check('no console errors (hands camera)', errors.length === 0, errors.join(' | '));
     await page.screenshot({ path: path.join(CACHE, 'hands.png') });
   }

@@ -55,8 +55,6 @@ The panel on the right (toggle with <kbd>H</kbd>) controls:
 - **Show fingertips and outline.** Draws the tracked fingertips and the
   window outline.
 - **Mirror camera.** Selfie-style mirroring, on by default.
-- **Preview region without hands.** Shows a fixed window so you can tune the
-  look without holding your hands up.
 
 Settings persist in `localStorage`.
 
