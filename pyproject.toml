@@ -9,13 +9,15 @@ dependencies = [
   "opencv-python>=4.9",
   "numpy>=1.26",
   "pillow>=10",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]
 
 [project.scripts]
-ascii-prism = "ascii_prism.app:main"
+ascii-prism = "ascii_prism.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -23,6 +25,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["ascii_prism*"]
+
+[tool.setuptools.package-data]
+ascii_prism = ["web/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

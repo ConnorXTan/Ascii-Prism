@@ -7,8 +7,10 @@ four fingertips become the corners of a window: inside it the video is
 rendered as characters, outside it stays ordinary video. Move, tilt or skew
 your hands and the character grid follows in perspective.
 
-Built with Python, OpenCV, MediaPipe and NumPy. Everything runs locally; no
-frames leave your machine.
+It is a website with a Python backend. The page in your browser captures the
+webcam and streams frames to a FastAPI server; Python does all the computer
+vision (MediaPipe hand tracking, OpenCV and NumPy rendering) and streams the
+result back. Nothing leaves your machine when you run it locally.
 
 ## Setup
 
@@ -41,32 +43,31 @@ The hand-tracking model (about 8 MB) is downloaded once on first run into
 python -m ascii_prism
 ```
 
-Two windows open: the video and a small customizer panel. macOS will ask for
-camera permission for your terminal the first time.
-
-Useful options:
+This starts the server at <http://localhost:8000/> and opens it in your
+browser. Allow camera access when asked. Options:
 
 ```bash
-python -m ascii_prism --camera 1                 # a different camera
-python -m ascii_prism --source clip.mp4          # a video or image file instead
-python -m ascii_prism --source photo.jpg --snapshot out.png   # one frame, no windows
-python -m ascii_prism --no-panel                 # keyboard controls only
-python -m ascii_prism --font /path/to/Mono.ttf   # a different monospace font
+python -m ascii_prism --port 9000            # another port
+python -m ascii_prism --no-open              # do not open a browser tab
+python -m ascii_prism --host 0.0.0.0         # reachable from other devices (see below)
 ```
 
-Keys in the video window:
+Keys on the page: `L` locks or unlocks the current window so you can lower
+your hands, `H` hides the customizer, `F` goes fullscreen.
 
-| Key | Action |
-| --- | --- |
-| `L` | Lock or unlock the current window so you can lower your hands |
-| `H` | Show or hide the customizer panel |
-| `T` | Toggle fingertip dots and outline |
-| `M` | Toggle camera mirroring |
-| `I` | Invert brightness |
-| `-` / `=` | Fewer / more characters across |
-| `F` | Fullscreen |
-| `S` | Save the current frame as a PNG |
-| `Q` or `Esc` | Quit |
+Browsers only allow camera access on `localhost` or over HTTPS. To use the
+site from a phone or another computer on your network, put it behind an
+HTTPS reverse proxy such as Caddy, or use a tunnel like `ngrok`.
+
+### Desktop mode
+
+The same pipeline also runs as a native window without a browser:
+
+```bash
+python -m ascii_prism desktop                     # webcam
+python -m ascii_prism desktop --source clip.mp4   # a video or image file
+python -m ascii_prism desktop --help              # all options
+```
 
 ## The gesture
 
@@ -96,10 +97,21 @@ plain video.
   more.
 - **Show fingertips and outline** and **Mirror camera** do what they say.
 
-Settings are saved to `~/.config/ascii-prism/settings.json`.
+Settings are kept in the browser's `localStorage` and sent to the server on
+every change.
 
 ## How it works
 
+- `ascii_prism/web/` is the page: `app.js` captures the webcam, sends one
+  JPEG frame at a time over a WebSocket and draws the frame that comes back.
+  Only one frame is in flight, so the stream runs at whatever rate the server
+  can process.
+- `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
+  hand tracker, renderer and settings; frames are processed in a thread pool
+  so the event loop stays responsive.
+- `ascii_prism/pipeline.py` ties tracking, geometry and rendering together
+  per frame and draws the fingertip overlay. It has no I/O, so it is shared
+  by the website and desktop mode and is easy to test from files.
 - `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
   thumb and index fingertips of up to two hands.
 - `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
@@ -111,14 +123,11 @@ Settings are saved to `~/.config/ascii-prism/settings.json`.
   per cell to get average cell colours, luminance picks a glyph per cell,
   NumPy composes the flat character image, and OpenCV warps it back into the
   quad over the live frame.
-- `ascii_prism/pipeline.py` ties tracking, geometry and rendering together
-  per frame and draws the fingertip overlay. It has no windows, so it can be
-  tested and driven from files.
-- `ascii_prism/app.py` handles the camera, the window, keys and the status
-  bar. `ascii_prism/panel.py` is the Tkinter customizer.
+- `ascii_prism/app.py` and `panel.py` are desktop mode: OpenCV window, keys,
+  status bar and a Tkinter customizer.
 
-On an Apple Silicon Mac, hand tracking takes about 19 ms per 720p frame and
-the ASCII render about 7 ms, so the app runs at roughly 30 fps.
+On an Apple Silicon Mac the server spends roughly 10 to 30 ms per 720p frame
+(hand tracking dominates), which gives 30 fps or better in the browser.
 
 ## Tests
 
@@ -126,6 +135,15 @@ the ASCII render about 7 ms, so the app runs at roughly 30 fps.
 python -m pytest
 ```
 
-Geometry and rendering tests run offline. The pipeline test downloads a
-sample photo of two hands and the hand model on first run, and is skipped if
-they cannot be fetched. Screenshots and cached files land in `tests/.cache/`.
+Geometry, rendering and server-validation tests run offline. The pipeline and
+WebSocket tests download a sample photo of two hands and the hand model on
+first run, and are skipped if they cannot be fetched. Cached files land in
+`tests/.cache/`.
+
+## Deploying
+
+The server needs long-lived WebSocket connections, so it fits hosts that run
+a persistent Python process (Fly.io, Railway, Render, a VPS), not serverless
+platforms such as Vercel functions. Run it with `--host 0.0.0.0` behind
+HTTPS. Note that every visitor's video is processed on the server, so plan
+CPU accordingly; one core handles roughly one viewer at full frame rate.
