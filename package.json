@@ -1,0 +1,15 @@
+{
+  "name": "ascii-prism",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn the space between your fingertips into live ASCII art, straight from your webcam.",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve -l 5173 .",
+    "test": "node --test",
+    "test:browser": "node tests/browser/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

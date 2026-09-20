@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Prism</title>
+  <meta name="description" content="Turn the space between your fingertips into live ASCII art from your webcam." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0c0f'/%3E%3Ctext x='32' y='44' font-family='Menlo,monospace' font-size='34' font-weight='700' text-anchor='middle' fill='%237cff6b'%3E%23@%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <main class="stage" id="stage">
+      <div class="viewport">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="gl"></canvas>
+        <canvas id="overlay"></canvas>
+        <div class="hint" id="hint" hidden></div>
+        <div class="banner" id="banner" hidden></div>
+      </div>
+      <div class="statusbar">
+        <span class="status" id="status-model">Starting…</span>
+        <span class="status">Hands <b id="status-hands">0</b></span>
+        <span class="status">Grid <b id="status-grid">–</b></span>
+        <span class="status"><b id="status-fps">0</b> fps</span>
+        <span class="spacer"></span>
+        <button id="lock" class="chip" title="Freeze the current region so you can lower your hands (L)">Lock region</button>
+        <button id="fullscreen" class="chip" title="Fullscreen (F)">Fullscreen</button>
+        <button id="toggle-panel" class="chip" title="Show or hide the customizer (H)">Customize</button>
+      </div>
+    </main>
+
+    <aside class="panel" id="panel">
+      <header>
+        <h1>ASCII<span>Prism</span></h1>
+        <p>Hold both hands up with thumbs and index fingers out. The four fingertips frame the ASCII window; everything outside stays live video.</p>
+      </header>
+
+      <section>
+        <h2>Characters</h2>
+        <label>
+          <span>Preset</span>
+          <select id="charset-preset"></select>
+        </label>
+        <label>
+          <span>Ramp, dark to bright</span>
+          <input id="charset-input" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" />
+        </label>
+        <div class="meta"><b id="charset-count">10</b> brightness levels</div>
+        <label class="check"><input type="checkbox" id="invert" /><span>Invert brightness</span></label>
+      </section>
+
+      <section>
+        <h2>Resolution</h2>
+        <label>
+          <span>Characters across <b class="value" id="columns-value">80</b></span>
+          <input id="columns" type="range" min="16" max="200" step="1" />
+        </label>
+        <div class="meta">Rows follow the shape of the region: <b id="rows-value">–</b></div>
+      </section>
+
+      <section>
+        <h2>Colour</h2>
+        <label>
+          <span>Mode</span>
+          <select id="color-mode">
+            <option value="sampled">Video colours</option>
+            <option value="vivid">Vivid (brightened)</option>
+            <option value="mono">Single colour</option>
+          </select>
+        </label>
+        <div class="row">
+          <label class="inline" id="mono-color-row"><span>Ink</span><input type="color" id="mono-color" /></label>
+          <label class="inline"><span>Background</span><input type="color" id="background" /></label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Tracking</h2>
+        <label>
+          <span>Smoothing <b class="value" id="smoothing-value">0.60</b></span>
+          <input id="smoothing" type="range" min="0" max="0.95" step="0.05" />
+        </label>
+        <label class="check"><input type="checkbox" id="show-tips" /><span>Show fingertips and outline</span></label>
+        <label class="check"><input type="checkbox" id="mirror" /><span>Mirror camera</span></label>
+        <label class="check"><input type="checkbox" id="preview" /><span>Preview region without hands</span></label>
+      </section>
+
+      <footer>
+        <button id="reset" class="chip">Reset to defaults</button>
+        <p class="keys"><kbd>L</kbd> lock · <kbd>F</kbd> fullscreen · <kbd>H</kbd> hide panel</p>
+      </footer>
+    </aside>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
