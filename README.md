@@ -7,21 +7,66 @@ four fingertips become the corners of a window: inside it the video is
 rendered as characters, outside it stays ordinary video. Move, tilt or skew
 your hands and the character grid follows in perspective.
 
-Everything runs locally in the browser. No frames leave your machine.
+Built with Python, OpenCV, MediaPipe and NumPy. Everything runs locally; no
+frames leave your machine.
+
+## Setup
+
+MediaPipe's current 1.x release crashes at start-up on macOS
+([google-ai-edge/mediapipe#6356](https://github.com/google-ai-edge/mediapipe/issues/6356)),
+so this project pins MediaPipe 0.10, which needs **Python 3.10 to 3.12**.
+The easiest way to get one is [uv](https://docs.astral.sh/uv/):
+
+```bash
+cd "Ascii Prism"
+uv venv --python 3.12          # downloads Python 3.12 if you do not have it
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+Without uv, any Python 3.12 works the same way:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+The hand-tracking model (about 8 MB) is downloaded once on first run into
+`~/.cache/ascii-prism/`.
 
 ## Run it
 
-You need a browser with WebGL2 and camera access (Chrome, Edge, Safari 17+ or
-Firefox). The hand-tracking model is fetched from Google's CDN on first load,
-so an internet connection is needed the first time.
-
 ```bash
-npm start
+python -m ascii_prism
 ```
 
-Then open <http://localhost:5173> and allow camera access. Any static file
-server works, for example `python3 -m http.server 5173`. Opening `index.html`
-directly from disk will not work because the app uses ES modules.
+Two windows open: the video and a small customizer panel. macOS will ask for
+camera permission for your terminal the first time.
+
+Useful options:
+
+```bash
+python -m ascii_prism --camera 1                 # a different camera
+python -m ascii_prism --source clip.mp4          # a video or image file instead
+python -m ascii_prism --source photo.jpg --snapshot out.png   # one frame, no windows
+python -m ascii_prism --no-panel                 # keyboard controls only
+python -m ascii_prism --font /path/to/Mono.ttf   # a different monospace font
+```
+
+Keys in the video window:
+
+| Key | Action |
+| --- | --- |
+| `L` | Lock or unlock the current window so you can lower your hands |
+| `H` | Show or hide the customizer panel |
+| `T` | Toggle fingertip dots and outline |
+| `M` | Toggle camera mirroring |
+| `I` | Invert brightness |
+| `-` / `=` | Fewer / more characters across |
+| `F` | Fullscreen |
+| `S` | Save the current frame as a PNG |
+| `Q` or `Esc` | Quit |
 
 ## The gesture
 
@@ -32,16 +77,13 @@ onto that quadrilateral. If the four points cross over each other (a
 non-convex shape) the window is hidden until you spread them out again.
 
 When fewer than two hands are visible the window disappears and you see
-plain video. Press <kbd>L</kbd> or click **Lock region** to freeze the
-current window so you can lower your hands.
+plain video.
 
 ## Customizer
 
-The panel on the right (toggle with <kbd>H</kbd>) controls:
-
 - **Characters.** Pick a preset ramp or type your own. Characters are ordered
   from darkest to brightest; each cell picks the character whose position in
-  the ramp matches its brightness. Emoji and block characters work.
+  the ramp matches its brightness. Block characters work.
 - **Invert brightness.** Flip the ramp, useful for light backgrounds.
 - **Characters across.** How many character columns the window has, from 16
   to 200. Rows are derived from the window's shape so characters keep their
@@ -52,45 +94,38 @@ The panel on the right (toggle with <kbd>H</kbd>) controls:
   applies in all modes.
 - **Smoothing.** Damps fingertip jitter. Higher values are steadier but lag
   more.
-- **Show fingertips and outline.** Draws the tracked fingertips and the
-  window outline.
-- **Mirror camera.** Selfie-style mirroring, on by default.
+- **Show fingertips and outline** and **Mirror camera** do what they say.
 
-Settings persist in `localStorage`.
+Settings are saved to `~/.config/ascii-prism/settings.json`.
 
 ## How it works
 
-- `src/hands.js` wraps MediaPipe's Hand Landmarker (tasks-vision) and
-  returns the thumb and index fingertips of up to two hands.
-- `src/geometry.js` orders the four points, checks convexity, and builds the
-  projective map (homography) from the unit square to the quadrilateral, plus
-  its inverse.
-- `src/renderer.js` is a WebGL2 renderer. Pass one draws the camera frame.
-  Pass two is a full-screen fragment shader: each pixel is mapped through the
-  inverse homography into the unit square (pixels outside are discarded so
-  the video shows through), assigned to a character cell, and coloured from
-  the average of nine video samples across that cell. Luminance selects a
-  glyph from a font atlas that is rebuilt whenever the character ramp
-  changes.
-- `src/main.js` runs the camera, the per-frame loop, the overlay and the UI.
+- `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
+  thumb and index fingertips of up to two hands.
+- `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
+  the quad, smooths it over time, and builds the perspective maps with
+  OpenCV.
+- `ascii_prism/ascii.py` renders the characters. Pillow rasterises the ramp
+  into a glyph atlas from a monospace font, sized so a block character fills
+  a cell exactly. Each frame, the quad is warped flat and shrunk to one pixel
+  per cell to get average cell colours, luminance picks a glyph per cell,
+  NumPy composes the flat character image, and OpenCV warps it back into the
+  quad over the live frame.
+- `ascii_prism/pipeline.py` ties tracking, geometry and rendering together
+  per frame and draws the fingertip overlay. It has no windows, so it can be
+  tested and driven from files.
+- `ascii_prism/app.py` handles the camera, the window, keys and the status
+  bar. `ascii_prism/panel.py` is the Tkinter customizer.
 
-There is no build step and no framework.
+On an Apple Silicon Mac, hand tracking takes about 19 ms per 720p frame and
+the ASCII render about 7 ms, so the app runs at roughly 30 fps.
 
 ## Tests
 
 ```bash
-npm test           # unit tests for the geometry (node:test)
-npm run test:browser
+python -m pytest
 ```
 
-The browser test needs Google Chrome installed and `npm install` (for
-`playwright-core`). It drives the app headlessly with Chrome's fake camera,
-checks the model loads and the customizer works, then feeds Chrome a sample
-photo of two hands and checks that fingertips are tracked and a window
-appears. Screenshots land in `tests/browser/.cache/`.
-
-## Deploying
-
-The app is static, so any static host works. Camera access requires HTTPS
-(or localhost), which hosts like Vercel, Netlify and GitHub Pages provide.
-For Vercel, `vercel` from this directory is enough; there is nothing to build.
+Geometry and rendering tests run offline. The pipeline test downloads a
+sample photo of two hands and the hand model on first run, and is skipped if
+they cannot be fetched. Screenshots and cached files land in `tests/.cache/`.
