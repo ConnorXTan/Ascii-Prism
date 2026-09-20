@@ -397,16 +397,15 @@ function drawOverlay(tips, region, width, height) {
     ctx.strokeStyle = locked ? 'rgba(255, 196, 0, 0.9)' : 'rgba(255, 255, 255, 0.55)';
     ctx.stroke();
   }
-  tips.forEach((p, i) => {
-    const isThumb = i % 2 === 0;
+  for (const p of tips) {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 6 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = isThumb ? 'rgba(255, 96, 160, 0.9)' : 'rgba(96, 200, 255, 0.9)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
     ctx.fill();
-    ctx.lineWidth = 2 * scale;
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.stroke();
-  });
+  }
 }
 
 init();
