@@ -22,6 +22,7 @@
     banner: $('banner'),
     conn: $('status-conn'),
     hands: $('status-hands'),
+    handInfo: $('status-hand-info'),
     grid: $('status-grid'),
     fps: $('status-fps'),
     ms: $('status-ms'),
@@ -289,7 +290,10 @@
         break;
       case 'status':
         els.hands.textContent = String(msg.hands);
-        els.grid.textContent = msg.grid ? `${msg.grid[0]} × ${msg.grid[1]}` : '–';
+        els.handInfo.textContent = (msg.handInfo || [])
+          .map((h) => `${h.hand[0]} ${h.facing}`)
+          .join(' · ');
+        els.grid.textContent = (msg.grid ? `${msg.grid[0]} × ${msg.grid[1]}` : '–') + (msg.twisted ? ' twisted' : '');
         els.rowsValue.textContent = msg.grid ? String(msg.grid[1]) : '–';
         els.ms.textContent = String(msg.ms);
         setHint(msg.hint);

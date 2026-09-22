@@ -83,7 +83,9 @@ def draw_status(frame: np.ndarray, result: FrameResult, fps: float) -> None:
     cv2.addWeighted(bar, 0.35, np.zeros_like(bar), 0.65, 0, bar)
     grid = f"{result.region.cols} x {result.region.rows}" if result.region else "-"
     lock = "  LOCKED" if result.locked else ""
-    text = f"{fps:4.0f} fps   hands {result.hands}   grid {grid}{lock}"
+    facing = "  ".join(f"{h.handedness[:1]}:{h.facing}" for h in result.hand_info)
+    twist = "  twisted" if result.twisted else ""
+    text = f"{fps:4.0f} fps   hands {result.hands} {facing}   grid {grid}{twist}{lock}"
     cv2.putText(frame, text, (12, h - int(bar_h * 0.35)), cv2.FONT_HERSHEY_SIMPLEX, 0.55 * scale * 1.3,
                 (235, 235, 235), 1, cv2.LINE_AA)
     if result.hint:
