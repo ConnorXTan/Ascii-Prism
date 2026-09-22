@@ -1,45 +1,16 @@
-"""Ordering fingertip points into a quad, sizing it, smoothing it, and the
-perspective maps between a flat rectangle and that quad.
+"""Quad geometry: sizing, smoothing, twist detection, and the bilinear maps
+between the unit square and the fingertip quad.
 
 Coordinates are image-style: x to the right, y down. Quads are (4, 2) arrays
-ordered [top-left, top-right, bottom-right, bottom-left].
+ordered [top-left, top-right, bottom-right, bottom-left], where "top" means
+the index-finger edge and "bottom" the thumb edge. The quad may be twisted
+(edges crossing, like an hourglass) when one hand is flipped; a bilinear map
+handles that where a perspective map cannot.
 """
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
-
-
-def order_quad(points) -> np.ndarray:
-    """Order four points clockwise on screen, starting at the top-left-most.
-
-    Works regardless of which finger produced which point.
-    """
-    pts = np.asarray(points, dtype=np.float64).reshape(4, 2)
-    centre = pts.mean(axis=0)
-    # Ascending atan2 with y pointing down is clockwise as seen on screen.
-    angles = np.arctan2(pts[:, 1] - centre[1], pts[:, 0] - centre[0])
-    pts = pts[np.argsort(angles)]
-    start = int(np.argmin(pts.sum(axis=1)))
-    return np.roll(pts, -start, axis=0)
-
-
-def is_convex(quad) -> bool:
-    """True when the ordered corners form a strictly convex quadrilateral."""
-    q = np.asarray(quad, dtype=np.float64).reshape(4, 2)
-    sign = 0
-    for i in range(4):
-        a, b, c = q[i], q[(i + 1) % 4], q[(i + 2) % 4]
-        cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
-        if abs(cross) < 1e-9:
-            return False
-        s = 1 if cross > 0 else -1
-        if sign == 0:
-            sign = s
-        elif s != sign:
-            return False
-    return True
 
 
 def quad_size(quad) -> tuple[float, float]:
@@ -60,21 +31,80 @@ def smooth_quad(prev, new, factor: float) -> np.ndarray:
     return np.asarray(prev, dtype=np.float64) * factor + new * (1.0 - factor)
 
 
-def rect_corners(width: float, height: float) -> np.ndarray:
-    return np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32)
+def _segments_cross(p1, p2, q1, q2) -> bool:
+    def orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    return (orient(p1, p2, q1) * orient(p1, p2, q2) < 0) and (orient(q1, q2, p1) * orient(q1, q2, p2) < 0)
 
 
-def rect_to_quad(width: float, height: float, quad) -> np.ndarray:
-    """3x3 perspective map from a width x height rectangle onto the quad."""
-    return cv2.getPerspectiveTransform(rect_corners(width, height), np.asarray(quad, dtype=np.float32))
+def is_twisted(quad) -> bool:
+    """True when opposite edges cross (an hourglass), e.g. one hand is flipped."""
+    tl, tr, br, bl = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+    return _segments_cross(tl, tr, bl, br) or _segments_cross(tl, bl, tr, br)
 
 
-def quad_to_rect(quad, width: float, height: float) -> np.ndarray:
-    """3x3 perspective map from the quad onto a width x height rectangle."""
-    return cv2.getPerspectiveTransform(np.asarray(quad, dtype=np.float32), rect_corners(width, height))
+def bilinear_map(quad, u, v) -> tuple[np.ndarray, np.ndarray]:
+    """Map unit-square coordinates (u right, v down) onto the quad."""
+    tl, tr, br, bl = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    w00, w10, w11, w01 = (1 - u) * (1 - v), u * (1 - v), u * v, (1 - u) * v
+    x = w00 * tl[0] + w10 * tr[0] + w11 * br[0] + w01 * bl[0]
+    y = w00 * tl[1] + w10 * tr[1] + w11 * br[1] + w01 * bl[1]
+    return x, y
 
 
-def apply_homography(h: np.ndarray, points) -> np.ndarray:
-    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
-    hom = np.hstack([pts, np.ones((len(pts), 1))]) @ h.T
-    return hom[:, :2] / hom[:, 2:3]
+def inverse_bilinear(quad, x, y) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Map image points back into the unit square (vectorized).
+
+    Returns (u, v, valid). `valid` is False where the point lies outside the
+    quad. For a twisted quad the surface folds over itself; in the overlap
+    the first root is used consistently. Based on the closed form in
+    I. Quilez, "Inverse bilinear interpolation".
+    """
+    tl, tr, br, bl = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    e = tr - tl
+    f = bl - tl
+    g = tl - tr + br - bl
+    hx, hy = x - tl[0], y - tl[1]
+
+    def cross(ax, ay, bx, by):
+        return ax * by - ay * bx
+
+    k2 = cross(g[0], g[1], f[0], f[1])
+    k1 = cross(e[0], e[1], f[0], f[1]) + cross(hx, hy, g[0], g[1])
+    k0 = cross(hx, hy, e[0], e[1])
+
+    def solve_u(v):
+        dx = e[0] + g[0] * v
+        dy = e[1] + g[1] * v
+        use_x = np.abs(dx) >= np.abs(dy)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ux = (hx - f[0] * v) / dx
+            uy = (hy - f[1] * v) / dy
+        return np.where(use_x, ux, uy)
+
+    def in_range(u, v):
+        return np.isfinite(u) & np.isfinite(v) & (u >= 0) & (u <= 1) & (v >= 0) & (v <= 1)
+
+    if abs(k2) < 1e-9:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            v = np.where(np.abs(k1) > 1e-12, -k0 / k1, np.nan)
+        u = solve_u(v)
+        return u, v, in_range(u, v)
+
+    disc = k1 * k1 - 4.0 * k0 * k2
+    has_root = disc >= 0
+    root = np.sqrt(np.maximum(disc, 0.0))
+    v1 = (-k1 - root) / (2.0 * k2)
+    v2 = (-k1 + root) / (2.0 * k2)
+    u1 = solve_u(v1)
+    u2 = solve_u(v2)
+    ok1 = has_root & in_range(u1, v1)
+    ok2 = has_root & in_range(u2, v2)
+    u = np.where(ok1, u1, u2)
+    v = np.where(ok1, v1, v2)
+    return u, v, ok1 | ok2

@@ -58,3 +58,15 @@ def test_tiny_quad_is_rejected():
     renderer = AsciiRenderer(FONT)
     frame = np.zeros((360, 640, 3), dtype=np.uint8)
     assert renderer.render(frame, [(0, 0), (5, 0), (5, 5), (0, 5)], Settings()) is None
+
+
+def test_twisted_quad_renders_as_a_ribbon():
+    renderer = AsciiRenderer(FONT)
+    frame = np.full((360, 640, 3), 200, dtype=np.uint8)
+    # Right-hand corners swapped vertically: edges cross in the middle.
+    quad = np.array([(100, 60), (540, 300), (540, 60), (100, 300)], dtype=np.float64)
+    settings = Settings(columns=40, charset=" \u2588", color_mode="mono", ink="#0000ff", background="#000000")
+    assert renderer.render(frame, quad, settings) is not None
+    assert tuple(frame[180, 150]) == (255, 0, 0)  # left lobe
+    assert tuple(frame[180, 490]) == (255, 0, 0)  # right lobe
+    assert tuple(frame[70, 320]) == (200, 200, 200)  # above the pinch, untouched

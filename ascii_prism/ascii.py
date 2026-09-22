@@ -1,8 +1,10 @@
-"""ASCII rendering of a perspective-warped region.
+"""ASCII rendering of a warped region.
 
 The flat character grid is composed with NumPy from a glyph atlas (coverage
-masks rendered with Pillow from a monospace font), then warped with OpenCV
-into the fingertip quadrilateral and pasted over the live frame.
+masks rendered with Pillow from a monospace font), then mapped with a
+bilinear warp into the fingertip quadrilateral and pasted over the live
+frame. A bilinear map, unlike a perspective one, also handles a twisted quad
+(edges crossing when one hand is flipped), which renders as a folded ribbon.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .geometry import quad_size, quad_to_rect, rect_to_quad
+from .geometry import bilinear_map, inverse_bilinear, quad_size
 from .settings import Settings, hex_to_bgr
 
 MAX_ROWS = 400
@@ -144,10 +146,12 @@ class AsciiRenderer:
         atlas = self.atlas(chars, glyph_h)
         glyph_w = atlas.glyph_w
 
-        # Average video colour per cell: warp the quad to a small flat image.
+        # Average video colour per cell: sample the quad onto a small flat image.
         sw, sh = cols * SUPERSAMPLE, rows * SUPERSAMPLE
-        to_flat = quad_to_rect(quad, sw, sh)
-        small = cv2.warpPerspective(frame, to_flat, (sw, sh), flags=cv2.INTER_LINEAR)
+        us = (np.arange(sw, dtype=np.float64) + 0.5) / sw
+        vs = (np.arange(sh, dtype=np.float64) + 0.5) / sh
+        sx, sy = bilinear_map(quad, us[None, :], vs[:, None])
+        small = cv2.remap(frame, sx.astype(np.float32), sy.astype(np.float32), cv2.INTER_LINEAR)
         cells = cv2.resize(small, (cols, rows), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
 
         lum = cells[..., 0] * 0.0722 + cells[..., 1] * 0.7152 + cells[..., 2] * 0.2126
@@ -173,11 +177,22 @@ class AsciiRenderer:
         flat = background + (ink_big - background) * cov
         flat = (flat * 255.0 + 0.5).astype(np.uint8)
 
-        # Warp it into the quad and paste over the frame.
+        # Warp it into the quad and paste over the frame. Only the quad's
+        # bounding box is touched; pixels outside the (possibly twisted)
+        # surface are left alone.
         fh, fw = flat.shape[:2]
-        to_quad = rect_to_quad(fw, fh, quad)
-        warped = cv2.warpPerspective(flat, to_quad, (frame_w, frame_h), flags=cv2.INTER_LINEAR)
-        mask = np.zeros((frame_h, frame_w), dtype=np.uint8)
-        cv2.fillConvexPoly(mask, np.round(np.asarray(quad)).astype(np.int32), 255)
-        np.copyto(frame, warped, where=mask[:, :, None] > 0)
+        q = np.asarray(quad, dtype=np.float64)
+        x0 = int(max(0, np.floor(q[:, 0].min())))
+        y0 = int(max(0, np.floor(q[:, 1].min())))
+        x1 = int(min(frame_w, np.ceil(q[:, 0].max()) + 1))
+        y1 = int(min(frame_h, np.ceil(q[:, 1].max()) + 1))
+        if x1 <= x0 or y1 <= y0:
+            return None
+        px = np.arange(x0, x1, dtype=np.float64) + 0.5
+        py = np.arange(y0, y1, dtype=np.float64) + 0.5
+        u, v, valid = inverse_bilinear(quad, px[None, :], py[:, None])
+        map_x = (np.nan_to_num(u) * fw - 0.5).astype(np.float32)
+        map_y = (np.nan_to_num(v) * fh - 0.5).astype(np.float32)
+        warped = cv2.remap(flat, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        np.copyto(frame[y0:y1, x0:x1], warped, where=valid[:, :, None])
         return RegionInfo(cols, rows, glyph_w, glyph_h)

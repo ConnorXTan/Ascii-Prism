@@ -11,25 +11,48 @@ import cv2
 import numpy as np
 
 from .ascii import AsciiRenderer, RegionInfo
-from .geometry import is_convex, order_quad, smooth_quad
-from .hands import HandTracker
+from .geometry import is_twisted, smooth_quad
+from .hands import Hand, HandTracker
 from .settings import Settings
 
 HINT_BOTH_HANDS = "Show both hands with thumbs and index fingers out. The four fingertips frame the ASCII window."
 HINT_ONE_HAND = "One hand found. Show the other hand too."
-HINT_CROSSED = "Your fingertips cross over. Spread thumbs and index fingers into four corners."
 HINT_SMALL = "Move your hands apart to open a larger window."
+
+
+@dataclass
+class HandInfo:
+    handedness: str
+    facing: str
 
 
 @dataclass
 class FrameResult:
     frame: np.ndarray
     hands: int
+    hand_info: list[HandInfo]
     tips: np.ndarray  # (N, 2) fingertip pixels in display space
     quad: np.ndarray | None
     region: RegionInfo | None
+    twisted: bool
     hint: str
     locked: bool
+
+
+def quad_from_hands(hands: list[Hand], width: int, height: int) -> np.ndarray:
+    """Corners follow the fingers: index tips make the top edge, thumb tips
+    the bottom edge, and the hand further left on screen gives the left
+    corners. Flip one hand and the edges cross into an hourglass."""
+    left, right = sorted(hands[:2], key=lambda h: h.center[0])
+    return np.array(
+        [
+            [left.index[0] * width, left.index[1] * height],
+            [right.index[0] * width, right.index[1] * height],
+            [right.thumb[0] * width, right.thumb[1] * height],
+            [left.thumb[0] * width, left.thumb[1] * height],
+        ],
+        dtype=np.float64,
+    )
 
 
 class Pipeline:
@@ -55,10 +78,10 @@ class Pipeline:
         frame = cv2.flip(frame_bgr, 1) if s.mirror else frame_bgr.copy()
         h, w = frame.shape[:2]
 
-        hands = []
+        hands: list[Hand] = []
         if self.tracker is not None:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            hands = self.tracker.detect(rgb, timestamp_ms)
+            hands = self.tracker.detect(rgb, timestamp_ms, mirrored=s.mirror)
         tips = np.array(
             [[p[0] * w, p[1] * h] for hand in hands[:2] for p in (hand.thumb, hand.index)],
             dtype=np.float64,
@@ -68,14 +91,9 @@ class Pipeline:
         hint = ""
         if self.locked and self._last_quad is not None:
             quad = self._last_quad
-        elif len(tips) == 4:
-            ordered = order_quad(tips)
-            if is_convex(ordered):
-                self._smoothed = smooth_quad(self._smoothed, ordered, s.smoothing)
-                quad = self._smoothed
-            else:
-                self._smoothed = None
-                hint = HINT_CROSSED
+        elif len(hands) >= 2:
+            self._smoothed = smooth_quad(self._smoothed, quad_from_hands(hands, w, h), s.smoothing)
+            quad = self._smoothed
         else:
             self._smoothed = None
             if self.tracker is None:
@@ -97,17 +115,28 @@ class Pipeline:
             self._last_quad = None
 
         if s.show_tips:
-            self._draw_overlay(frame, tips, quad)
-        return FrameResult(frame, len(hands), tips, quad, region, hint, self.locked)
+            self._draw_overlay(frame, hands, tips, quad)
+        info = [HandInfo(hand.handedness, hand.facing) for hand in hands[:2]]
+        twisted = quad is not None and is_twisted(quad)
+        return FrameResult(frame, len(hands), info, tips, quad, region, twisted, hint, self.locked)
 
-    def _draw_overlay(self, frame: np.ndarray, tips: np.ndarray, quad: np.ndarray | None) -> None:
+    def _draw_overlay(self, frame: np.ndarray, hands: list[Hand], tips: np.ndarray, quad: np.ndarray | None) -> None:
         h, w = frame.shape[:2]
         scale = max(1.0, w / 640)
+        thick = max(1, int(round(1.5 * scale)))
         if quad is not None:
             colour = (0, 196, 255) if self.locked else (255, 255, 255)
             pts = np.round(quad).astype(np.int32).reshape(-1, 1, 2)
-            cv2.polylines(frame, [pts], True, colour, max(1, int(round(1.5 * scale))), cv2.LINE_AA)
+            cv2.polylines(frame, [pts], True, colour, thick, cv2.LINE_AA)
         for x, y in tips:
             centre = (int(round(x)), int(round(y)))
             cv2.circle(frame, centre, int(6 * scale), (0, 0, 0), -1, cv2.LINE_AA)
-            cv2.circle(frame, centre, int(6 * scale), (255, 255, 255), max(1, int(round(1.5 * scale))), cv2.LINE_AA)
+            cv2.circle(frame, centre, int(6 * scale), (255, 255, 255), thick, cv2.LINE_AA)
+        for hand in hands[:2]:
+            label = f"{hand.handedness[:1]} {hand.facing}"
+            x = int(round(hand.wrist[0] * w))
+            y = int(round(hand.wrist[1] * h)) + int(22 * scale)
+            x = min(max(x - int(18 * scale), 0), w - int(70 * scale))
+            y = min(y, h - 4)
+            cv2.putText(frame, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, (0, 0, 0), thick * 3, cv2.LINE_AA)
+            cv2.putText(frame, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, (255, 255, 255), thick, cv2.LINE_AA)
