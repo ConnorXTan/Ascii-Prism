@@ -35,13 +35,13 @@ def _segments_cross(p1, p2, q1, q2) -> bool:
     def orient(a, b, c):
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
-    return (orient(p1, p2, q1) * orient(p1, p2, q2) < 0) and (orient(q1, q2, p1) * orient(q1, q2, p2) < 0)
+    return bool((orient(p1, p2, q1) * orient(p1, p2, q2) < 0) and (orient(q1, q2, p1) * orient(q1, q2, p2) < 0))
 
 
 def is_twisted(quad) -> bool:
     """True when opposite edges cross (an hourglass), e.g. one hand is flipped."""
     tl, tr, br, bl = np.asarray(quad, dtype=np.float64).reshape(4, 2)
-    return _segments_cross(tl, tr, bl, br) or _segments_cross(tl, bl, tr, br)
+    return bool(_segments_cross(tl, tr, bl, br) or _segments_cross(tl, bl, tr, br))
 
 
 def bilinear_map(quad, u, v) -> tuple[np.ndarray, np.ndarray]:

@@ -117,7 +117,7 @@ class Pipeline:
         if s.show_tips:
             self._draw_overlay(frame, hands, tips, quad)
         info = [HandInfo(hand.handedness, hand.facing) for hand in hands[:2]]
-        twisted = quad is not None and is_twisted(quad)
+        twisted = bool(quad is not None and is_twisted(quad))
         return FrameResult(frame, len(hands), info, tips, quad, region, twisted, hint, self.locked)
 
     def _draw_overlay(self, frame: np.ndarray, hands: list[Hand], tips: np.ndarray, quad: np.ndarray | None) -> None:
