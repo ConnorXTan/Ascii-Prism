@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from .geometry import bilinear_map, inverse_bilinear, quad_size
+from .grading import blend, grade
 from .settings import Settings, hex_to_bgr
 
 MAX_ROWS = 400
@@ -160,14 +161,7 @@ class AsciiRenderer:
         n = len(chars)
         idx = np.clip((lum * n).astype(np.int32), 0, n - 1)
 
-        if settings.color_mode == "mono":
-            ink = np.empty_like(cells)
-            ink[:] = np.array(hex_to_bgr(settings.ink), dtype=np.float32) / 255.0
-        elif settings.color_mode == "vivid":
-            peak = np.maximum(cells.max(axis=2, keepdims=True), 0.15)
-            ink = np.clip(cells / peak, 0.0, 1.0)
-        else:
-            ink = cells
+        ink = grade(cells, settings)
         background = np.array(hex_to_bgr(settings.background), dtype=np.float32) / 255.0
 
         # Compose the flat character image.
@@ -194,5 +188,6 @@ class AsciiRenderer:
         map_x = (np.nan_to_num(u) * fw - 0.5).astype(np.float32)
         map_y = (np.nan_to_num(v) * fh - 0.5).astype(np.float32)
         warped = cv2.remap(flat, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-        np.copyto(frame[y0:y1, x0:x1], warped, where=valid[:, :, None])
+        region = frame[y0:y1, x0:x1]
+        np.copyto(region, blend(region, warped, settings.opacity), where=valid[:, :, None])
         return RegionInfo(cols, rows, glyph_w, glyph_h)

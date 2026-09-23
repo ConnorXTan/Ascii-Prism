@@ -10,7 +10,19 @@ from .charsets import DEFAULT_CHARSET_ID, by_id
 
 COLUMNS_RANGE = (16, 200)
 SMOOTHING_RANGE = (0.0, 0.95)
-COLOR_MODES = ("sampled", "vivid", "mono")
+SATURATION_RANGE = (0.0, 2.0)
+HUE_RANGE = (-180.0, 180.0)
+BRIGHTNESS_RANGE = (0.5, 2.0)
+OPACITY_RANGE = (0.0, 1.0)
+
+RANGES: dict[str, tuple[float, float]] = {
+    "columns": COLUMNS_RANGE,
+    "smoothing": SMOOTHING_RANGE,
+    "saturation": SATURATION_RANGE,
+    "hue": HUE_RANGE,
+    "brightness": BRIGHTNESS_RANGE,
+    "opacity": OPACITY_RANGE,
+}
 
 
 def default_path() -> Path:
@@ -22,19 +34,23 @@ class Settings:
     charset_id: str = DEFAULT_CHARSET_ID
     charset: str = by_id(DEFAULT_CHARSET_ID).chars
     columns: int = 80
-    color_mode: str = "sampled"
-    ink: str = "#7cff6b"
-    background: str = "#000000"
     invert: bool = False
+    # Colour grading of the sampled video colours, applied to every character.
+    saturation: float = 1.0  # 0 is greyscale, 1 is the video as-is, 2 is twice as vivid
+    hue: float = 0.0  # degrees of hue rotation
+    brightness: float = 1.0  # gain on the sampled colours
+    opacity: float = 1.0  # 1 covers the video completely, 0 lets it all through
+    background: str = "#000000"
     smoothing: float = 0.6
     show_tips: bool = True
     mirror: bool = True
 
     def clamp(self) -> "Settings":
-        self.columns = int(min(COLUMNS_RANGE[1], max(COLUMNS_RANGE[0], self.columns)))
-        self.smoothing = float(min(SMOOTHING_RANGE[1], max(SMOOTHING_RANGE[0], self.smoothing)))
-        if self.color_mode not in COLOR_MODES:
-            self.color_mode = "sampled"
+        for name, (lo, hi) in RANGES.items():
+            setattr(self, name, min(hi, max(lo, getattr(self, name))))
+        self.columns = int(self.columns)
+        for name in ("saturation", "hue", "brightness", "opacity", "smoothing"):
+            setattr(self, name, float(getattr(self, name)))
         if not self.charset:
             self.charset = " "
         return self
@@ -53,7 +69,7 @@ class Settings:
         try:
             data = json.loads(path.read_text())
             for f in fields(cls):
-                if f.name in data and isinstance(data[f.name], type(f.default)):
+                if f.name in data and _matches(data[f.name], type(f.default)):
                     setattr(s, f.name, data[f.name])
         except (OSError, ValueError):
             pass
@@ -66,6 +82,15 @@ class Settings:
             path.write_text(json.dumps(asdict(self), indent=2))
         except OSError:
             pass
+
+
+def _matches(value, expected: type) -> bool:
+    """Type check for JSON values: ints are fine for floats, bools are not numbers."""
+    if isinstance(value, bool):
+        return expected is bool
+    if expected is float:
+        return isinstance(value, (int, float))
+    return isinstance(value, expected)
 
 
 def hex_to_bgr(value: str) -> tuple[int, int, int]:

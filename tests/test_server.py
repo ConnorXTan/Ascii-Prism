@@ -20,15 +20,17 @@ def test_pages_and_config():
 
 def test_apply_settings_validates_types_and_ranges():
     s = Settings()
-    apply_settings(s, {"columns": 999, "smoothing": 1, "invert": "yes", "color_mode": "weird",
-                       "charset": "x" * 1000, "mirror": False, "ink": 5, "unknown": 1})
+    apply_settings(s, {"columns": 999, "smoothing": 1, "invert": "yes", "hue": 400, "saturation": "lots",
+                       "opacity": -3, "charset": "x" * 1000, "mirror": False, "background": 5, "unknown": 1})
     assert s.columns == 200
     assert s.smoothing == 0.95
     assert s.invert is False  # wrong type ignored
-    assert s.color_mode == "sampled"  # unknown mode falls back
+    assert s.hue == 180  # clamped
+    assert s.saturation == 1.0  # wrong type ignored
+    assert s.opacity == 0.0  # clamped
     assert len(s.charset) == 256
     assert s.mirror is False
-    assert s.ink == "#7cff6b"  # wrong type ignored
+    assert s.background == "#000000"  # wrong type ignored
     apply_settings(s, {"columns": True})
     assert s.columns == 200  # bools are not ints
 
@@ -39,7 +41,7 @@ def test_websocket_round_trip(hands_photo, hand_model):
     client = TestClient(app)
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json() == {"type": "ready"}
-        ws.send_json({"type": "settings", "settings": {"columns": 40, "color_mode": "vivid"}})
+        ws.send_json({"type": "settings", "settings": {"columns": 40, "saturation": 1.5, "hue": 90, "opacity": 0.7}})
         ws.send_bytes(b"definitely not a jpeg")  # ignored
         ws.send_bytes(jpeg)
         out = ws.receive_bytes()

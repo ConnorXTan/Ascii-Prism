@@ -9,9 +9,9 @@ from tkinter import colorchooser, ttk
 from typing import Callable
 
 from .charsets import CHARSETS, by_id
-from .settings import COLUMNS_RANGE, SMOOTHING_RANGE, Settings
+from .settings import COLUMNS_RANGE, RANGES, SMOOTHING_RANGE, Settings
 
-COLOR_MODE_LABELS = {"sampled": "Video colours", "vivid": "Vivid (brightened)", "mono": "Single colour"}
+GRADING = (("saturation", "Saturation"), ("hue", "Hue"), ("brightness", "Brightness"), ("opacity", "Opacity"))
 
 
 class Panel:
@@ -67,17 +67,17 @@ class Panel:
 
         ttk.Separator(frame).grid(sticky="ew", pady=6)
         ttk.Label(frame, text="Colour", font=("TkDefaultFont", 10, "bold")).grid(sticky="w", **pad)
-        self.mode_var = tk.StringVar()
-        mode = ttk.Combobox(frame, textvariable=self.mode_var, state="readonly", width=28,
-                            values=list(COLOR_MODE_LABELS.values()))
-        mode.grid(sticky="ew", **pad)
-        mode.bind("<<ComboboxSelected>>", self._mode_chosen)
-        colours = ttk.Frame(frame)
-        colours.grid(sticky="w", **pad)
-        self.ink_button = tk.Button(colours, text="Ink", width=10, command=lambda: self._pick_colour("ink"))
-        self.ink_button.grid(row=0, column=0, padx=(0, 8))
-        self.bg_button = tk.Button(colours, text="Background", width=12, command=lambda: self._pick_colour("background"))
-        self.bg_button.grid(row=0, column=1)
+        self.grade_vars: dict[str, tk.DoubleVar] = {}
+        self.grade_labels: dict[str, ttk.Label] = {}
+        for name, _title in GRADING:
+            self.grade_labels[name] = ttk.Label(frame, text="")
+            self.grade_labels[name].grid(sticky="w", **pad)
+            self.grade_vars[name] = tk.DoubleVar()
+            lo, hi = RANGES[name]
+            ttk.Scale(frame, from_=lo, to=hi, variable=self.grade_vars[name],
+                      command=lambda value, n=name: self._grade_moved(n, value)).grid(sticky="ew", **pad)
+        self.bg_button = tk.Button(frame, text="Backdrop", width=12, command=self._pick_background)
+        self.bg_button.grid(sticky="w", **pad)
 
         ttk.Separator(frame).grid(sticky="ew", pady=6)
         ttk.Label(frame, text="Tracking", font=("TkDefaultFont", 10, "bold")).grid(sticky="w", **pad)
@@ -151,22 +151,24 @@ class Panel:
         self.smoothing_label.config(text=f"Smoothing: {self.settings.smoothing:.2f}")
         self.on_change()
 
-    def _mode_chosen(self, _event=None) -> None:
-        for key, label in COLOR_MODE_LABELS.items():
-            if label == self.mode_var.get():
-                self._set("color_mode", key)
-        self._update_colour_buttons()
+    def _grade_moved(self, name: str, value) -> None:
+        if self._syncing:
+            return
+        setattr(self.settings, name, float(round(float(value))) if name == "hue" else round(float(value), 2))
+        self._update_grade_label(name)
+        self.on_change()
 
-    def _pick_colour(self, name: str) -> None:
-        current = getattr(self.settings, name)
-        _rgb, hex_value = colorchooser.askcolor(color=current, parent=self.root, title=f"Choose {name} colour")
+    def _update_grade_label(self, name: str) -> None:
+        value = getattr(self.settings, name)
+        title = dict(GRADING)[name]
+        text = f"{title}: {value:+.0f}°" if name == "hue" else f"{title}: {value * 100:.0f}%"
+        self.grade_labels[name].config(text=text)
+
+    def _pick_background(self) -> None:
+        _rgb, hex_value = colorchooser.askcolor(color=self.settings.background, parent=self.root, title="Choose backdrop colour")
         if hex_value:
-            self._set(name, hex_value)
-            self._update_colour_buttons()
-
-    def _update_colour_buttons(self) -> None:
-        self.ink_button.config(bg=self.settings.ink, state="normal" if self.settings.color_mode == "mono" else "disabled")
-        self.bg_button.config(bg=self.settings.background)
+            self._set("background", hex_value)
+            self.bg_button.config(bg=hex_value)
 
     def _lock(self) -> None:
         self.set_locked(self.on_lock())
@@ -193,13 +195,15 @@ class Panel:
             self.invert_var.set(s.invert)
             self.columns_var.set(s.columns)
             self.columns_label.config(text=f"Characters across: {s.columns}")
-            self.mode_var.set(COLOR_MODE_LABELS[s.color_mode])
+            for name, _title in GRADING:
+                self.grade_vars[name].set(getattr(s, name))
+                self._update_grade_label(name)
+            self.bg_button.config(bg=s.background)
             self.smoothing_var.set(s.smoothing)
             self.smoothing_label.config(text=f"Smoothing: {s.smoothing:.2f}")
             self.tips_var.set(s.show_tips)
             self.mirror_var.set(s.mirror)
             self._update_levels()
-            self._update_colour_buttons()
         finally:
             self._syncing = False
 

@@ -31,7 +31,7 @@ def test_flipped_hand_makes_a_twisted_window():
     flipped_right = make_hand(index=(0.8, 0.8), thumb=(0.8, 0.2), center=(0.75, 0.5), facing="back")
     frame = np.full((300, 400, 3), 180, dtype=np.uint8)
     pipeline = Pipeline(FakeTracker([left, flipped_right]), AsciiRenderer(find_font()),
-                        Settings(mirror=False, show_tips=False, smoothing=0, charset=" █", color_mode="mono", ink="#ff0000"))
+                        Settings(mirror=False, show_tips=False, smoothing=0, charset="█ ", background="#ff0000"))
     result = pipeline.process(frame, 0)
     assert result.hands == 2
     assert result.twisted is True

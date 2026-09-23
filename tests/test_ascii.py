@@ -36,10 +36,10 @@ def test_render_replaces_quad_interior_only():
     frame = np.full((360, 640, 3), 200, dtype=np.uint8)  # bright grey everywhere
     original = frame.copy()
     quad = np.array([(150, 80), (480, 90), (500, 300), (130, 280)], dtype=np.float64)
-    settings = Settings(columns=40, charset=" █", color_mode="mono", ink="#ff0000", background="#000000")
+    settings = Settings(columns=40, charset="█ ", background="#ff0000")
     region = renderer.render(frame, quad, settings)
     assert region is not None and region.cols == 40 and region.rows > 1
-    # Bright input picks the block glyph, drawn in pure red (BGR 0,0,255).
+    # Bright input picks the space glyph, which shows the pure red backdrop (BGR 0,0,255).
     assert tuple(frame[190, 320]) == (0, 0, 255)
     # Outside the quad nothing changed.
     assert np.array_equal(frame[10, 10], original[10, 10])
@@ -65,7 +65,7 @@ def test_twisted_quad_renders_as_a_ribbon():
     frame = np.full((360, 640, 3), 200, dtype=np.uint8)
     # Right-hand corners swapped vertically: edges cross in the middle.
     quad = np.array([(100, 60), (540, 300), (540, 60), (100, 300)], dtype=np.float64)
-    settings = Settings(columns=40, charset=" \u2588", color_mode="mono", ink="#0000ff", background="#000000")
+    settings = Settings(columns=40, charset="\u2588 ", background="#0000ff")
     assert renderer.render(frame, quad, settings) is not None
     assert tuple(frame[180, 150]) == (255, 0, 0)  # left lobe
     assert tuple(frame[180, 490]) == (255, 0, 0)  # right lobe
