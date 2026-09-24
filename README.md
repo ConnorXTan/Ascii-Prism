@@ -44,7 +44,9 @@ python -m ascii_prism
 ```
 
 This starts the server at <http://localhost:8000/> and opens it in your
-browser. Allow camera access when asked. Options:
+browser. The page first shows the gesture and asks to turn on the camera;
+allow access when the browser asks. Once the camera has been allowed, later
+visits go straight to the video. Options:
 
 ```bash
 python -m ascii_prism --port 9000            # another port
