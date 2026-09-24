@@ -15,7 +15,8 @@ def test_pages_and_config():
     cfg = client.get("/api/config").json()
     assert cfg["charsets"][0]["id"] == "standard"
     assert cfg["defaults"]["columns"] == 80
-    assert cfg["columnsRange"] == [16, 200]
+    assert cfg["ranges"]["columns"] == [16, 200]
+    assert cfg["ranges"]["hue"] == [-180, 180]
 
 
 def test_apply_settings_validates_types_and_ranges():

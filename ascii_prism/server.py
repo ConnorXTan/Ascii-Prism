@@ -31,7 +31,7 @@ from .charsets import CHARSETS
 from .hands import HandTracker
 from .model import ensure_model
 from .pipeline import Pipeline
-from .settings import COLUMNS_RANGE, SMOOTHING_RANGE, Settings
+from .settings import RANGES, Settings
 
 WEB_DIR = Path(__file__).parent / "web"
 MAX_CHARSET_LENGTH = 256
@@ -70,8 +70,7 @@ async def config() -> dict:
     return {
         "charsets": [{"id": cs.id, "label": cs.label, "chars": cs.chars} for cs in CHARSETS],
         "defaults": asdict(Settings()),
-        "columnsRange": list(COLUMNS_RANGE),
-        "smoothingRange": list(SMOOTHING_RANGE),
+        "ranges": {name: list(bounds) for name, bounds in RANGES.items()},
         "version": __version__,
     }
 
