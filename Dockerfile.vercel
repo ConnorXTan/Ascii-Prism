@@ -1,5 +1,6 @@
 # Vercel builds this image and runs it as a Function (container image).
-# MediaPipe's OpenCV build needs libGL and GLib at import time, the renderer
+# MediaPipe's OpenCV build needs libGL and GLib at import time and the hand
+# landmarker loads EGL and OpenGL ES when a tracker is created, the renderer
 # wants a monospace TrueType font, and the hand model is baked in at build
 # time so a cold start never has to download it.
 FROM python:3.12-slim-bookworm
@@ -11,7 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 libportaudio2 fonts-dejavu-core \
+        libgl1 libegl1 libgles2 libglib2.0-0 libportaudio2 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
