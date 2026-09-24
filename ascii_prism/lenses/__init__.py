@@ -11,10 +11,13 @@ from __future__ import annotations
 from .ascii import AsciiLens
 from .base import Lens, LensContext, render_lens
 from .echo import EchoLens
+from .gameboy import GameboyLens
+from .night import NightLens
 from .rain import RainLens
+from .sketch import SketchLens
 from .thermal import ThermalLens
 
-LENSES: list[type[Lens]] = [AsciiLens, ThermalLens, EchoLens, RainLens]
+LENSES: list[type[Lens]] = [AsciiLens, ThermalLens, EchoLens, RainLens, GameboyLens, SketchLens, NightLens]
 DEFAULT_LENS_ID = AsciiLens.id
 
 

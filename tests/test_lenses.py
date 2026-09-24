@@ -4,8 +4,12 @@ import pytest
 from ascii_prism import lenses
 from ascii_prism.ascii import AsciiRenderer, find_font
 from ascii_prism.hands import Hand
+from ascii_prism.lenses import looks
 from ascii_prism.lenses.ascii import AsciiLens
+from ascii_prism.lenses.gameboy import GameboyLens
+from ascii_prism.lenses.night import NightLens
 from ascii_prism.lenses.rain import RainLens
+from ascii_prism.lenses.sketch import SketchLens
 from ascii_prism.lenses.thermal import ThermalLens
 from ascii_prism.pipeline import Pipeline
 from ascii_prism.settings import Settings
@@ -176,3 +180,24 @@ def test_rain_lens_animates_and_survives_a_resize(renderer):
     assert drawn and region2.rows > region.rows
     lens.reset()
     assert lens._rain is None
+
+
+@pytest.mark.parametrize("cls", [GameboyLens, SketchLens, NightLens])
+def test_pixel_lenses_draw_only_inside_the_window(renderer, cls):
+    frame = np.full((240, 320, 3), 128, dtype=np.uint8)
+    frame[:, :160] = 30
+    out = frame.copy()
+    drawn, region = lenses.render_lens(cls(), out, QUAD, Settings(), context(renderer, out))
+    assert drawn and region is None
+    assert not np.array_equal(out[60:180, 60:250], frame[60:180, 60:250])
+    assert np.array_equal(out[:20], frame[:20]) and np.array_equal(out[:, 300:], frame[:, 300:])
+
+
+def test_gameboy_lens_paints_the_palette(renderer):
+    out = np.full((240, 320, 3), 128, dtype=np.uint8)
+    lenses.render_lens(GameboyLens(), out, QUAD, Settings(), context(renderer, out))
+    inside = out[80:160, 80:230].reshape(-1, 3).astype(int)
+    lo, hi = looks.GB_PALETTE.min(axis=0), looks.GB_PALETTE.max(axis=0)
+    assert (inside >= lo).all() and (inside <= hi).all()  # the warp blends neighbours but stays in range
+    assert (inside[:, 1] >= inside[:, 0]).all() and (inside[:, 1] > inside[:, 2]).all()  # every pixel is green
+    assert sum((inside == tone).all(axis=1).sum() for tone in looks.GB_PALETTE) > len(inside) // 20  # block centres stay exact
