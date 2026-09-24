@@ -1,0 +1,517 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-24T07:12:26Z",
+  "title": "Design System: ASCII Prism",
+  "extensions": {
+    "colorMeta": {
+      "lens-black": {
+        "role": "neutral",
+        "displayName": "Lens Black",
+        "canonical": "#000000",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(49% 0 0)",
+          "oklch(60% 0 0)",
+          "oklch(72% 0 0)",
+          "oklch(83% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "smoked-glass": {
+        "role": "neutral",
+        "displayName": "Smoked Glass",
+        "canonical": "rgba(18, 18, 20, 0.84)",
+        "tonalRamp": [
+          "rgba(18, 18, 20, 0.04)",
+          "rgba(18, 18, 20, 0.06)",
+          "rgba(18, 18, 20, 0.11)",
+          "rgba(18, 18, 20, 0.22)",
+          "rgba(18, 18, 20, 0.35)",
+          "rgba(18, 18, 20, 0.5)",
+          "rgba(18, 18, 20, 0.7)",
+          "rgba(18, 18, 20, 0.84)"
+        ]
+      },
+      "glass-hover": {
+        "role": "neutral",
+        "displayName": "Glass Hover",
+        "canonical": "rgba(255, 255, 255, 0.06)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.22)",
+          "rgba(255, 255, 255, 0.35)",
+          "rgba(255, 255, 255, 0.5)",
+          "rgba(255, 255, 255, 0.7)",
+          "rgba(255, 255, 255, 0.84)"
+        ]
+      },
+      "glass-active": {
+        "role": "neutral",
+        "displayName": "Glass Active",
+        "canonical": "rgba(255, 255, 255, 0.11)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.22)",
+          "rgba(255, 255, 255, 0.35)",
+          "rgba(255, 255, 255, 0.5)",
+          "rgba(255, 255, 255, 0.7)",
+          "rgba(255, 255, 255, 0.84)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(255, 255, 255, 0.10)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.22)",
+          "rgba(255, 255, 255, 0.35)",
+          "rgba(255, 255, 255, 0.5)",
+          "rgba(255, 255, 255, 0.7)",
+          "rgba(255, 255, 255, 0.84)"
+        ]
+      },
+      "hairline-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "rgba(255, 255, 255, 0.22)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.22)",
+          "rgba(255, 255, 255, 0.35)",
+          "rgba(255, 255, 255, 0.5)",
+          "rgba(255, 255, 255, 0.7)",
+          "rgba(255, 255, 255, 0.84)"
+        ]
+      },
+      "ink-well": {
+        "role": "neutral",
+        "displayName": "Ink Well",
+        "canonical": "rgba(0, 0, 0, 0.35)",
+        "tonalRamp": [
+          "rgba(0, 0, 0, 0.04)",
+          "rgba(0, 0, 0, 0.06)",
+          "rgba(0, 0, 0, 0.11)",
+          "rgba(0, 0, 0, 0.22)",
+          "rgba(0, 0, 0, 0.35)",
+          "rgba(0, 0, 0, 0.5)",
+          "rgba(0, 0, 0, 0.7)",
+          "rgba(0, 0, 0, 0.84)"
+        ]
+      },
+      "hint-glass": {
+        "role": "neutral",
+        "displayName": "Hint Glass",
+        "canonical": "rgba(0, 0, 0, 0.50)",
+        "tonalRamp": [
+          "rgba(0, 0, 0, 0.04)",
+          "rgba(0, 0, 0, 0.06)",
+          "rgba(0, 0, 0, 0.11)",
+          "rgba(0, 0, 0, 0.22)",
+          "rgba(0, 0, 0, 0.35)",
+          "rgba(0, 0, 0, 0.5)",
+          "rgba(0, 0, 0, 0.7)",
+          "rgba(0, 0, 0, 0.84)"
+        ]
+      },
+      "bright-zinc": {
+        "role": "primary",
+        "displayName": "Bright Zinc",
+        "canonical": "oklch(97% 0.002 286)",
+        "tonalRamp": [
+          "oklch(15% 0.004 286)",
+          "oklch(26% 0.004 286)",
+          "oklch(38% 0.004 286)",
+          "oklch(49% 0.004 286)",
+          "oklch(60% 0.004 286)",
+          "oklch(72% 0.004 286)",
+          "oklch(83% 0.004 286)",
+          "oklch(95% 0.004 286)"
+        ]
+      },
+      "zinc-ash": {
+        "role": "neutral",
+        "displayName": "Zinc Ash",
+        "canonical": "oklch(71% 0.012 286)",
+        "tonalRamp": [
+          "oklch(15% 0.012 286)",
+          "oklch(26% 0.012 286)",
+          "oklch(38% 0.012 286)",
+          "oklch(49% 0.012 286)",
+          "oklch(60% 0.012 286)",
+          "oklch(72% 0.012 286)",
+          "oklch(83% 0.012 286)",
+          "oklch(95% 0.012 286)"
+        ]
+      },
+      "zinc-smoke": {
+        "role": "neutral",
+        "displayName": "Zinc Smoke",
+        "canonical": "oklch(52% 0.014 286)",
+        "tonalRamp": [
+          "oklch(15% 0.014 286)",
+          "oklch(26% 0.014 286)",
+          "oklch(38% 0.014 286)",
+          "oklch(49% 0.014 286)",
+          "oklch(60% 0.014 286)",
+          "oklch(72% 0.014 286)",
+          "oklch(83% 0.014 286)",
+          "oklch(95% 0.014 286)"
+        ]
+      },
+      "pure-white": {
+        "role": "primary",
+        "displayName": "Pure White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(26% 0 0)",
+          "oklch(38% 0 0)",
+          "oklch(49% 0 0)",
+          "oklch(60% 0 0)",
+          "oklch(72% 0 0)",
+          "oklch(83% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "signal-green": {
+        "role": "status",
+        "displayName": "Signal Green",
+        "canonical": "oklch(80% 0.17 152)",
+        "tonalRamp": [
+          "oklch(15% 0.17 152)",
+          "oklch(26% 0.17 152)",
+          "oklch(38% 0.17 152)",
+          "oklch(49% 0.17 152)",
+          "oklch(60% 0.17 152)",
+          "oklch(72% 0.17 152)",
+          "oklch(83% 0.17 152)",
+          "oklch(95% 0.17 152)"
+        ]
+      },
+      "lock-amber": {
+        "role": "status",
+        "displayName": "Lock Amber",
+        "canonical": "oklch(85% 0.17 85)",
+        "tonalRamp": [
+          "oklch(15% 0.17 85)",
+          "oklch(26% 0.17 85)",
+          "oklch(38% 0.17 85)",
+          "oklch(49% 0.17 85)",
+          "oklch(60% 0.17 85)",
+          "oklch(72% 0.17 85)",
+          "oklch(83% 0.17 85)",
+          "oklch(95% 0.17 85)"
+        ]
+      },
+      "fault-red": {
+        "role": "status",
+        "displayName": "Fault Red",
+        "canonical": "oklch(71% 0.16 22)",
+        "tonalRamp": [
+          "oklch(15% 0.16 22)",
+          "oklch(26% 0.16 22)",
+          "oklch(38% 0.16 22)",
+          "oklch(49% 0.16 22)",
+          "oklch(60% 0.16 22)",
+          "oklch(72% 0.16 22)",
+          "oklch(83% 0.16 22)",
+          "oklch(95% 0.16 22)"
+        ]
+      },
+      "fault-glass": {
+        "role": "status",
+        "displayName": "Fault Glass",
+        "canonical": "rgba(60, 14, 20, 0.85)",
+        "tonalRamp": [
+          "rgba(60, 14, 20, 0.04)",
+          "rgba(60, 14, 20, 0.06)",
+          "rgba(60, 14, 20, 0.11)",
+          "rgba(60, 14, 20, 0.22)",
+          "rgba(60, 14, 20, 0.35)",
+          "rgba(60, 14, 20, 0.5)",
+          "rgba(60, 14, 20, 0.7)",
+          "rgba(60, 14, 20, 0.84)"
+        ]
+      },
+      "fault-text": {
+        "role": "status",
+        "displayName": "Fault Text",
+        "canonical": "oklch(87% 0.06 22)",
+        "tonalRamp": [
+          "oklch(15% 0.06 22)",
+          "oklch(26% 0.06 22)",
+          "oklch(38% 0.06 22)",
+          "oklch(49% 0.06 22)",
+          "oklch(60% 0.06 22)",
+          "oklch(72% 0.06 22)",
+          "oklch(83% 0.06 22)",
+          "oklch(95% 0.06 22)"
+        ]
+      },
+      "mark-yellow": {
+        "role": "mark",
+        "displayName": "Mark Yellow",
+        "canonical": "oklch(87% 0.18 96)",
+        "tonalRamp": [
+          "oklch(15% 0.18 96)",
+          "oklch(26% 0.18 96)",
+          "oklch(38% 0.18 96)",
+          "oklch(49% 0.18 96)",
+          "oklch(60% 0.18 96)",
+          "oklch(72% 0.18 96)",
+          "oklch(83% 0.18 96)",
+          "oklch(95% 0.18 96)"
+        ]
+      },
+      "mark-blue": {
+        "role": "mark",
+        "displayName": "Mark Blue",
+        "canonical": "oklch(73% 0.14 255)",
+        "tonalRamp": [
+          "oklch(15% 0.14 255)",
+          "oklch(26% 0.14 255)",
+          "oklch(38% 0.14 255)",
+          "oklch(49% 0.14 255)",
+          "oklch(60% 0.14 255)",
+          "oklch(72% 0.14 255)",
+          "oklch(83% 0.14 255)",
+          "oklch(95% 0.14 255)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base size; switch labels and pills at 13px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel headings."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "The wordmark in the top bar, with a 1px black text shadow over video."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, value names, reset buttons, chips and notes."
+      },
+      "tool": {
+        "displayName": "Tool",
+        "purpose": "Captions under dock icons; 10px under 560px."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "The top bar status line; 11px under 560px."
+      },
+      "value": {
+        "displayName": "Value",
+        "purpose": "Every live number next to a control."
+      },
+      "input": {
+        "displayName": "Input",
+        "purpose": "The ramp text field."
+      }
+    },
+    "shadows": [
+      {
+        "name": "glass",
+        "value": "0 10px 40px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.04) inset",
+        "purpose": "The dock and panels. Does not change with state."
+      },
+      {
+        "name": "thumb",
+        "value": "0 1px 4px rgba(0, 0, 0, 0.5)",
+        "purpose": "Slider thumbs."
+      },
+      {
+        "name": "dot-ring",
+        "value": "0 0 0 2px rgba(0, 0, 0, 0.35)",
+        "purpose": "The connection dot's halo over video."
+      },
+      {
+        "name": "text-on-video",
+        "value": "0 1px 2px rgba(0, 0, 0, 0.6)",
+        "purpose": "Text shadow for the brand and readout over video."
+      },
+      {
+        "name": "scrim",
+        "value": "linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0))",
+        "purpose": "The top bar's only background."
+      },
+      {
+        "name": "blur-glass",
+        "value": "blur(20px) saturate(140%)",
+        "purpose": "Backdrop filter on the dock; 24px on panels, 12px on pills."
+      }
+    ],
+    "motion": [
+      {
+        "name": "rise",
+        "value": "140ms ease-out; opacity 0 to 1, translateY 6px to 0",
+        "purpose": "Panel open. Removed under prefers-reduced-motion."
+      },
+      {
+        "name": "state",
+        "value": "120ms ease",
+        "purpose": "Background and colour on tools and chips."
+      },
+      {
+        "name": "switch",
+        "value": "150ms ease",
+        "purpose": "Switch track colour and knob slide; also the unhide button's opacity."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Dock and Tools",
+      "kind": "nav",
+      "refersTo": "dock",
+      "description": "The bottom toolbar: smoked glass holding icon-over-caption tools. One is open, one is pressed (Lock).",
+      "html": "<nav class=\"ds-dock\"><button class=\"ds-tool\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M4 16v-4M8 16V9M12 16V6M16 16V3\"/></svg><span>Characters</span></button><button class=\"ds-tool\" aria-expanded=\"true\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"14\" height=\"14\" rx=\"2\"/><path d=\"M3 8h14M3 12h14M8 3v14M12 3v14\"/></svg><span>Grid</span></button><span class=\"ds-divider\"></span><button class=\"ds-tool\" aria-pressed=\"true\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><rect x=\"4.5\" y=\"9\" width=\"11\" height=\"8\" rx=\"2\"/><path class=\"ds-shackle\" d=\"M7 9V6.5a3 3 0 0 1 6 0V9\"/></svg><span>Locked</span></button></nav>",
+      "css": ".ds-dock{display:inline-flex;align-items:stretch;gap:2px;height:60px;padding:4px;background:var(--surface, rgba(18,18,20,0.84));border:1px solid var(--line, rgba(255,255,255,0.1));border-radius:14px;box-shadow:var(--shadow, 0 10px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset);backdrop-filter:blur(20px) saturate(140%);-webkit-backdrop-filter:blur(20px) saturate(140%);font-family:var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:74px;padding:0 12px;border:0;background:none;border-radius:10px;color:var(--text-2, #a1a1aa);font:500 11px/1 var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);letter-spacing:.01em;cursor:pointer;transition:background-color 120ms ease,color 120ms ease} .ds-tool svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round} .ds-tool:hover{background:var(--surface-2, rgba(255,255,255,0.06));color:var(--text, #f4f4f5)} .ds-tool:focus-visible{outline:2px solid rgba(255,255,255,.7);outline-offset:2px} .ds-tool[aria-expanded=\"true\"]{background:var(--surface-3, rgba(255,255,255,0.11));color:var(--text, #f4f4f5)} .ds-tool[aria-pressed=\"true\"]{color:var(--warn, #fbbf24)} .ds-tool[aria-pressed=\"true\"] .ds-shackle{transform:translate(3px,-2px) rotate(20deg);transform-origin:13px 9px} .ds-divider{width:1px;margin:10px 4px;background:var(--line-strong, rgba(255,255,255,0.22))}"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "A settings popover: title and Reset, then fields with a mono value on the right and the control beneath.",
+      "html": "<section class=\"ds-panel\"><header><h2>Grid</h2><button class=\"ds-reset\">Reset</button></header><label class=\"ds-field\"><span class=\"ds-label\">Columns <output>80</output></span><input class=\"ds-range\" type=\"range\" min=\"16\" max=\"200\" value=\"80\"></label><p class=\"ds-note\">Rows follow the shape of your window.</p></section>",
+      "css": ".ds-panel{width:min(380px,calc(100vw - 24px));padding:14px 18px 18px;background:var(--surface, rgba(18,18,20,0.84));border:1px solid var(--line, rgba(255,255,255,0.1));border-radius:14px;box-shadow:var(--shadow, 0 10px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);color:var(--text, #f4f4f5);font:14px/1.45 var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-panel header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px} .ds-panel h2{margin:0;font-size:13px;font-weight:600} .ds-reset{font:12px var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);color:var(--text-2, #a1a1aa);padding:2px 6px;margin-right:-6px;border:0;background:none;border-radius:6px;cursor:pointer} .ds-reset:hover{color:var(--text, #f4f4f5);background:var(--surface-2, rgba(255,255,255,0.06))} .ds-field{display:flex;flex-direction:column;gap:8px} .ds-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text-2, #a1a1aa)} .ds-label output{margin-left:auto;font:12px var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace);color:var(--text, #f4f4f5)} .ds-note{margin:10px 0 0;font-size:12px;color:var(--text-3, #6b6b74)} .ds-range{-webkit-appearance:none;appearance:none;width:100%;height:20px;margin:0;background:none} .ds-range::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line-strong, rgba(255,255,255,0.22))} .ds-range::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5.5px;border-radius:50%;border:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5)} .ds-range:focus-visible{outline:none} .ds-range:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(255,255,255,.35)}"
+    },
+    {
+      "name": "Preset Chips",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Radio-style pills for preset ramps. The selected chip inverts to Bright Zinc with black text.",
+      "html": "<div class=\"ds-presets\" role=\"radiogroup\"><button class=\"ds-chip\" role=\"radio\" aria-checked=\"true\">Standard</button><button class=\"ds-chip\" role=\"radio\" aria-checked=\"false\">Blocks</button><button class=\"ds-chip\" role=\"radio\" aria-checked=\"false\">Dots</button><button class=\"ds-chip\" role=\"radio\" aria-checked=\"false\">Custom</button></div>",
+      "css": ".ds-presets{display:flex;flex-wrap:wrap;gap:6px;font-family:var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line, rgba(255,255,255,0.1));background:var(--surface-2, rgba(255,255,255,0.06));color:var(--text-2, #a1a1aa);font:12px var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);cursor:pointer;transition:background-color 120ms ease,color 120ms ease} .ds-chip:hover{color:var(--text, #f4f4f5);background:var(--surface-3, rgba(255,255,255,0.11))} .ds-chip:focus-visible{outline:2px solid rgba(255,255,255,.7);outline-offset:2px} .ds-chip[aria-checked=\"true\"]{color:#000;background:var(--text, #f4f4f5);border-color:var(--text, #f4f4f5)}"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch",
+      "description": "A pill toggle. Off is Hairline Strong, on is Signal Green, the knob is Pure White.",
+      "html": "<label class=\"ds-switch\"><input type=\"checkbox\" checked><span class=\"ds-track\" aria-hidden=\"true\"></span><span>Invert</span></label><label class=\"ds-switch\"><input type=\"checkbox\"><span class=\"ds-track\" aria-hidden=\"true\"></span><span>Mirror camera</span></label>",
+      "css": ".ds-switch{display:flex;align-items:center;gap:10px;margin-top:12px;font:13px var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);color:var(--text, #f4f4f5);cursor:pointer;user-select:none;position:relative} .ds-switch input{position:absolute;opacity:0;width:1px;height:1px} .ds-track{position:relative;width:30px;height:18px;border-radius:999px;background:var(--line-strong, rgba(255,255,255,0.22));transition:background-color 150ms ease;flex:none} .ds-track::after{content:\"\";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform 150ms ease} .ds-switch input:checked + .ds-track{background:var(--ok, #4ade80)} .ds-switch input:checked + .ds-track::after{transform:translateX(12px)} .ds-switch input:focus-visible + .ds-track{box-shadow:0 0 0 2px rgba(255,255,255,.5)}"
+    },
+    {
+      "name": "Ramp Text Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "The character ramp field: recessed Ink Well, mono, tracked out so glyphs can be told apart.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">Ramp <em>dark to bright</em></span><input class=\"ds-input\" type=\"text\" value=\" .:-=+*#%@\" spellcheck=\"false\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text-2, #a1a1aa)} .ds-label em{font-style:normal;color:var(--text-3, #6b6b74);margin-left:6px} .ds-input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line, rgba(255,255,255,0.1));background:rgba(0,0,0,.35);color:var(--text, #f4f4f5);font:13px var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace);letter-spacing:.04em} .ds-input:focus{outline:none;border-color:var(--line-strong, rgba(255,255,255,0.22))}"
+    },
+    {
+      "name": "Hint Pill",
+      "kind": "custom",
+      "refersTo": "pill-hint",
+      "description": "Transient guidance shown top-centre over the video.",
+      "html": "<div class=\"ds-hint\">Show both hands with thumbs and index fingers out</div>",
+      "css": ".ds-hint{display:inline-block;max-width:min(520px,calc(100vw - 32px));padding:9px 16px;border-radius:999px;border:1px solid var(--line, rgba(255,255,255,0.1));background:rgba(0,0,0,.5);color:var(--text, #f4f4f5);font:13px var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);text-align:center;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}"
+    },
+    {
+      "name": "Notice Pill",
+      "kind": "custom",
+      "refersTo": "pill-notice",
+      "description": "The only error surface: the hint pill in Fault Glass with a Fault Red border and Fault Text.",
+      "html": "<div class=\"ds-notice\" role=\"alert\">Camera access was blocked. Allow it in the address bar and reload.</div>",
+      "css": ".ds-notice{display:inline-block;max-width:min(520px,calc(100vw - 32px));padding:9px 16px;border-radius:999px;border:1px solid rgba(248,113,113,.4);background:rgba(60,14,20,.85);color:#fecaca;font:13px var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif);text-align:center;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}"
+    },
+    {
+      "name": "Readout",
+      "kind": "nav",
+      "refersTo": "readout",
+      "description": "The top-right status line: connection dot, connection word, then mono measurements with dim secondary items.",
+      "html": "<div class=\"ds-readout\"><span class=\"ds-conn\"><i class=\"ds-dot ds-dot-ok\"></i>Tracking</span><span>2 hands <span class=\"ds-dim\">R back · L back</span></span><span>80 × 5 <span class=\"ds-dim\">· twisted</span></span><span>43 fps · 10.3 ms</span></div>",
+      "css": ".ds-readout{display:inline-flex;align-items:center;gap:14px;font:12px/1 var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace);color:var(--text-2, #a1a1aa);text-shadow:0 1px 2px rgba(0,0,0,.7);white-space:nowrap} .ds-conn{display:inline-flex;align-items:center;gap:7px;color:var(--text, #f4f4f5)} .ds-dot{width:7px;height:7px;border-radius:50%;background:var(--text-3, #6b6b74);box-shadow:0 0 0 2px rgba(0,0,0,.35)} .ds-dot-ok{background:var(--ok, #4ade80)} .ds-dim{color:var(--text-3, #6b6b74)}"
+    },
+    {
+      "name": "Colour Wheel",
+      "kind": "custom",
+      "refersTo": "wheel",
+      "description": "Hue around the ring from the top, saturation from grey at the centre outward, a thin ring at 70% radius marking the video as-is. In the app it is drawn on a canvas; this is a CSS approximation.",
+      "html": "<div class=\"ds-wheel-row\"><div class=\"ds-wheel\" tabindex=\"0\" role=\"group\" aria-label=\"Hue and saturation\"><span class=\"ds-ring\"></span><span class=\"ds-handle\" style=\"left:50%;top:15%\"></span></div><dl class=\"ds-wheel-values\"><div><dt>Hue</dt><dd>+0°</dd></div><div><dt>Saturation</dt><dd>100%</dd></div></dl></div>",
+      "css": ".ds-wheel-row{display:flex;gap:16px;align-items:flex-start;font-family:var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-wheel{position:relative;flex:none;width:160px;height:160px;border-radius:50%;cursor:crosshair;background:radial-gradient(circle,#808080 0%,rgba(128,128,128,0) 70%),conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)} .ds-wheel:focus-visible{outline:2px solid rgba(255,255,255,.7);outline-offset:3px} .ds-ring{position:absolute;inset:15%;border-radius:50%;border:1px solid rgba(255,255,255,.55);pointer-events:none} .ds-handle{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.6) inset;pointer-events:none} .ds-wheel-values{margin:4px 0 0;flex:1;min-width:0} .ds-wheel-values div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--line, rgba(255,255,255,0.1))} .ds-wheel-values dt{font-size:12px;color:var(--text-2, #a1a1aa)} .ds-wheel-values dd{margin:0;font:12px var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace);color:var(--text, #f4f4f5)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Viewfinder",
+    "overview": "ASCII Prism's interface is camera glass. The live video fills the viewport edge to edge and is the only source of colour and light; every piece of chrome is a translucent instrument laid over it, the way a camera's HUD sits over the scene. The picture leads. Controls recede into smoked glass at the top and bottom edges, brighten only when touched, and never occupy the middle of the frame, because the middle belongs to the visitor's hands.\n\nThe mood is quiet, precise and camera-like. Density is low: one slim readout bar, one dock of six tools, one panel open at a time, one transient pill for a hint or an error. Text is small and calm; anything the machine measured is set in monospace so numbers read as readouts rather than copy. Depth is ambient rather than structural: the glass floats on blur and a single soft shadow, it is not stacked.\n\nConfirmed rejections: no sidebar or single column of stacked controls next to the video; no neon or brand-coloured accent in the chrome; no opaque panels.",
+    "keyCharacteristics": [
+      "Full-bleed video on a black stage; chrome is overlaid, never beside.",
+      "Smoked glass (dark, 84% opaque, blurred) for every persistent surface.",
+      "Colour in the chrome means status and nothing else: green connected, amber locked, red failed.",
+      "Zinc text ramp in three steps; brightness, not hue, signals hierarchy and state.",
+      "System sans for words, system mono for measurements.",
+      "Pills for anything transient or selectable; rounded rectangles for anything that stays."
+    ],
+    "rules": [
+      {
+        "name": "The Status-Only Colour Rule",
+        "body": "The chrome is colourless. If a hue appears on a control, it is because something is true right now: connected, locked, or failed. Decorative colour comes from the video, never from the interface, and the prism gradient stays inside the mark.",
+        "section": "colors"
+      },
+      {
+        "name": "The Brightness Ladder Rule",
+        "body": "State and hierarchy are shown by stepping up the zinc ramp or the glass fills (Smoke, Ash, Bright; Hover, Active, Selected), not by changing hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Means Measured Rule",
+        "body": "Anything the machine produced (a percentage, a count, a frame time, a hex code, a character ramp) is set in the mono face. Anything a person reads as language is set in the sans. Never mix the two inside one string.",
+        "section": "typography"
+      },
+      {
+        "name": "The Clear Stage Rule",
+        "body": "Chrome lives on the top and bottom edges. Nothing persistent is placed in the middle band of the viewport; that band belongs to the hands. Only the transient hint may approach it, and only from the top.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Panel Rule",
+        "body": "At most one panel is open, and it always opens from the dock, centred. There is no second column, no drawer, no sidebar.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Shadow Rule",
+        "body": "There is one shadow for glass and it does not change with state or importance. Hover, focus and open are shown with fill and text brightness, never with a bigger shadow or a lift.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep the video full-bleed on Lens Black and lay every control over it as Smoked Glass with a Hairline border and backdrop blur.",
+      "**Do** add new controls as a tool in the dock that opens one centred panel, following the field pattern: label left, mono value right, control beneath.",
+      "**Do** show hover, open and selected by stepping up the glass fills and the zinc ramp; reserve Signal Green, Lock Amber and Fault Red for states that are true right now.",
+      "**Do** set every measured value, count and code in the mono face at 12px.",
+      "**Do** keep pills for the transient (hints, notices) and the selectable (chips), and 14px and 10px rounded rectangles for the persistent.",
+      "**Do** respect safe-area insets at the top and bottom and honour `prefers-reduced-motion` by removing the panel rise and all transitions."
+    ],
+    "donts": [
+      "**Don't** add a sidebar, a drawer, or a column of stacked controls beside the video.",
+      "**Don't** put a persistent element in the middle band of the viewport; that space is for the hands.",
+      "**Don't** introduce a decorative or brand accent colour into the chrome, including the prism gradient outside the mark and any neon green.",
+      "**Don't** use opaque panels, hard or coloured shadows, or shadows that grow on hover.",
+      "**Don't** open two panels at once or let a panel push the dock.",
+      "**Don't** reintroduce a single-colour ink mode for the rendered characters; colour comes from the video through the wheel."
+    ]
+  }
+}

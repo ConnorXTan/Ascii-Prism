@@ -510,11 +510,19 @@ input[type="color"]::-moz-color-swatch { border: 0; border-radius: 5px; }
   .topbar { padding-left: 16px; padding-right: 16px; }
   .readout { gap: 10px; font-size: 11px; }
   #readout-perf { display: none; }
-  .tool { min-width: 58px; padding: 0 8px; font-size: 10px; }
+  /* Six tools must share the width of a phone: let them shrink instead of
+     growing to their labels, and keep the whole dock inside the viewport. */
+  .dock { width: calc(100vw - 16px); max-width: 440px; }
+  .tool { flex: 1 1 0; min-width: 0; padding: 0 2px; font-size: 10px; }
+  .tool span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dock .divider { margin: 10px 2px; }
   .wheel-row { flex-direction: column; align-items: center; }
   .wheel { width: 180px; height: 180px; }
   .wheel-values { width: 100%; }
+}
+
+@media (max-width: 360px) {
+  .tool { font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
