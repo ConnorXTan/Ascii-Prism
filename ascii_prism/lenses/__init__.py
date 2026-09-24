@@ -12,12 +12,13 @@ from .ascii import AsciiLens
 from .base import Lens, LensContext, render_lens
 from .echo import EchoLens
 from .gameboy import GameboyLens
+from .kaleido import KaleidoLens
 from .night import NightLens
 from .rain import RainLens
 from .sketch import SketchLens
 from .thermal import ThermalLens
 
-LENSES: list[type[Lens]] = [AsciiLens, ThermalLens, EchoLens, RainLens, GameboyLens, SketchLens, NightLens]
+LENSES: list[type[Lens]] = [AsciiLens, ThermalLens, EchoLens, RainLens, GameboyLens, SketchLens, NightLens, KaleidoLens]
 DEFAULT_LENS_ID = AsciiLens.id
 
 

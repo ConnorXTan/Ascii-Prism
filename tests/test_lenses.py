@@ -7,6 +7,7 @@ from ascii_prism.hands import Hand
 from ascii_prism.lenses import looks
 from ascii_prism.lenses.ascii import AsciiLens
 from ascii_prism.lenses.gameboy import GameboyLens
+from ascii_prism.lenses.kaleido import KaleidoLens
 from ascii_prism.lenses.night import NightLens
 from ascii_prism.lenses.rain import RainLens
 from ascii_prism.lenses.sketch import SketchLens
@@ -182,7 +183,7 @@ def test_rain_lens_animates_and_survives_a_resize(renderer):
     assert lens._rain is None
 
 
-@pytest.mark.parametrize("cls", [GameboyLens, SketchLens, NightLens])
+@pytest.mark.parametrize("cls", [GameboyLens, SketchLens, NightLens, KaleidoLens])
 def test_pixel_lenses_draw_only_inside_the_window(renderer, cls):
     frame = np.full((240, 320, 3), 128, dtype=np.uint8)
     frame[:, :160] = 30
