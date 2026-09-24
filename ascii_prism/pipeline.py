@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 
 from .ascii import AsciiRenderer, RegionInfo
-from .geometry import is_twisted, quad_size, smooth_quad
+from .geometry import QuadFilter, is_twisted, quad_size
 from .hands import Hand, HandTracker
 from .settings import Settings
 
@@ -84,7 +84,7 @@ class Pipeline:
         self.renderer = renderer
         self.settings = settings
         self.locked = False
-        self._smoothed: np.ndarray | None = None  # normalized
+        self._filter = QuadFilter()  # normalized
         self._last_quad: np.ndarray | None = None  # normalized
 
     def toggle_lock(self) -> bool:
@@ -94,7 +94,7 @@ class Pipeline:
         return self.locked
 
     def reset_tracking(self) -> None:
-        self._smoothed = None
+        self._filter.reset()
 
     def track(self, frame_bgr: np.ndarray, timestamp_ms: int) -> TrackResult:
         """Find the hands and the window in a camera frame, without rendering."""
@@ -116,10 +116,9 @@ class Pipeline:
         if self.locked and self._last_quad is not None:
             quad = self._last_quad
         elif len(hands) >= 2:
-            self._smoothed = smooth_quad(self._smoothed, quad_from_hands(hands, 1.0, 1.0), s.smoothing)
-            quad = self._smoothed
+            quad = self._filter(quad_from_hands(hands, 1.0, 1.0), timestamp_ms, s.smoothing)
         else:
-            self._smoothed = None
+            self._filter.reset()
             if self.tracker is None:
                 hint = HINT_NO_TRACKER
             elif len(hands) == 1:
