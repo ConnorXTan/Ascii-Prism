@@ -15,9 +15,9 @@ from .geometry import is_twisted, smooth_quad
 from .hands import Hand, HandTracker
 from .settings import Settings
 
-HINT_BOTH_HANDS = "Show both hands with thumbs and index fingers out. The four fingertips frame the ASCII window."
-HINT_ONE_HAND = "One hand found. Show the other hand too."
-HINT_SMALL = "Move your hands apart to open a larger window."
+HINT_BOTH_HANDS = "Hold up both hands, thumbs and index fingers out."
+HINT_ONE_HAND = "One hand found. Show the other one too."
+HINT_SMALL = "Spread your hands apart to open a bigger window."
 
 
 @dataclass
