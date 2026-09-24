@@ -112,16 +112,21 @@ every change.
 
 ## How it works
 
-- `ascii_prism/web/` is the page: `app.js` captures the webcam, sends one
-  JPEG frame at a time over a WebSocket and draws the frame that comes back.
-  Only one frame is in flight, so the stream runs at whatever rate the server
-  can process.
+- `ascii_prism/web/` is the page: `app.js` captures the webcam and sends
+  small JPEG frames (480 pixels wide) over a WebSocket for hand tracking,
+  keeping two in flight so the network overlaps the server's work. The
+  server answers with where the window is, and `render.js` draws the video
+  and the ASCII window from the full-size camera feed on the visitor's own
+  machine: it samples the average colour under every cell, grades it, picks
+  a glyph by brightness, composes the character grid on a canvas and warps
+  it into the window with the same bilinear map the Python renderer uses.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
-  hand tracker, renderer and settings; frames are processed in a thread pool
-  so the event loop stays responsive.
-- `ascii_prism/pipeline.py` ties tracking, geometry and rendering together
-  per frame and draws the fingertip overlay. It has no I/O, so it is shared
-  by the website and desktop mode and is easy to test from files.
+  hand tracker, geometry state and settings; frames are processed in a
+  thread pool so the event loop stays responsive.
+- `ascii_prism/pipeline.py` ties tracking and geometry together per frame.
+  `track()` returns the window in normalized coordinates for the website;
+  `process()` also renders it and draws the fingertip overlay for desktop
+  mode. It has no I/O, so it is easy to test from files.
 - `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
   thumb and index fingertips of up to two hands.
 - `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
@@ -136,8 +141,9 @@ every change.
 - `ascii_prism/app.py` and `panel.py` are desktop mode: OpenCV window, keys,
   status bar and a Tkinter customizer.
 
-On an Apple Silicon Mac the server spends roughly 10 to 30 ms per 720p frame
-(hand tracking dominates), which gives 30 fps or better in the browser.
+Hand tracking costs the server about 10 ms per frame on an Apple Silicon Mac
+and about 30 ms on a Vercel function. The browser draws at the camera's frame
+rate regardless; only the window's position updates at the tracking rate.
 
 ## Tests
 
@@ -152,10 +158,10 @@ first run, and are skipped if they cannot be fetched. Cached files land in
 
 ## Deploying
 
-Every visitor's video is processed on the server, so plan CPU accordingly;
-one core handles roughly one viewer at full frame rate. Any host that runs a
-persistent Python process works: run `python -m ascii_prism --host 0.0.0.0`
-behind HTTPS.
+Every visitor's hand tracking runs on the server, about 30 ms per frame on
+one Vercel vCPU, so plan CPU accordingly; the rendering happens in the
+visitor's browser. Any host that runs a persistent Python process works: run
+`python -m ascii_prism --host 0.0.0.0` behind HTTPS.
 
 ### Vercel
 
