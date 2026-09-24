@@ -14,6 +14,10 @@
   'use strict';
 
   const STORAGE_KEY = 'ascii-prism.settings.v3';
+  const ONBOARD_KEY = 'ascii-prism.onboard.v1'; // { introSeen, lockTipSeen }
+  const LOCK_TIP_AFTER_MS = 3000; // window held this long before the Lock tip shows
+  const LOCK_TIP_FOR_MS = 7000;
+  const GHOST_AFTER_MS = 800; // hands lost this long before the ghost guide returns
   const JPEG_QUALITY = 0.8;
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
@@ -30,6 +34,11 @@
     view: $('view'),
     hint: $('hint'),
     notice: $('notice'),
+    intro: $('intro'),
+    introTitle: $('intro-title'),
+    introCopy: $('intro-copy'),
+    introNote: $('intro-note'),
+    start: $('start'),
     connDot: $('conn-dot'),
     connText: $('conn-text'),
     readoutHands: $('readout-hands'),
@@ -72,6 +81,12 @@
   let inFlight = false;
   let locked = false;
   let cameraOk = false;
+  let onboard = loadOnboard();
+  let serverHint = '';
+  let tip = '';
+  let tipTimer = null;
+  let windowSince = 0;
+  let ghostTimer = null;
   let reconnectDelay = 1000;
   let lastFps = 0;
   const capture = document.createElement('canvas');
@@ -92,6 +107,22 @@
   function saveSettings() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+      /* private mode etc. */
+    }
+  }
+
+  function loadOnboard() {
+    try {
+      return JSON.parse(localStorage.getItem(ONBOARD_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveOnboard() {
+    try {
+      localStorage.setItem(ONBOARD_KEY, JSON.stringify(onboard));
     } catch {
       /* private mode etc. */
     }
@@ -235,6 +266,11 @@
         return;
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'Enter' && gateOpen()) {
+        startCameraFlow();
+        e.preventDefault();
+        return;
+      }
       const key = e.key.toLowerCase();
       if (key === 'l') toggleLock();
       else if (key === 'h') setChromeHidden(!document.body.classList.contains('chrome-hidden'));
@@ -413,6 +449,12 @@
 
   function setLocked(value) {
     locked = value;
+    if (locked) {
+      if (tip) clearTip();
+      onboard.lockTipSeen = true;
+      saveOnboard();
+      hideIntro();
+    }
     els.lock.setAttribute('aria-pressed', String(locked));
     els.lock.lastElementChild.textContent = locked ? 'Locked' : 'Lock';
   }
@@ -434,8 +476,126 @@
   }
 
   function setHint(text) {
+    serverHint = text;
+    if (text && tip) clearTip(); // the server has something more urgent to say
+    renderHint();
+  }
+
+  function renderHint() {
+    const text = tip || serverHint;
     els.hint.textContent = text;
     els.hint.hidden = !text;
+  }
+
+  function showTip(text, ms) {
+    tip = text;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(clearTip, ms);
+    renderHint();
+  }
+
+  function clearTip() {
+    tip = '';
+    clearTimeout(tipTimer);
+    tipTimer = null;
+    renderHint();
+  }
+
+  // ---------------------------------------------------------- onboarding
+  // The intro element plays three parts: a gate before the camera is on, a
+  // blocked state with a way back, and a faint ghost of the window over the
+  // live video until both hands are found.
+  function showIntro(mode, title, copy, button, note) {
+    els.intro.className = `intro ${mode}`;
+    els.introTitle.textContent = title;
+    els.introCopy.textContent = copy;
+    els.start.hidden = !button;
+    if (button) els.start.textContent = button;
+    els.introNote.textContent = note || '';
+    els.intro.hidden = false;
+  }
+
+  function hideIntro() {
+    clearTimeout(ghostTimer);
+    ghostTimer = null;
+    if (els.intro.hidden || els.intro.classList.contains('out')) return;
+    els.intro.classList.add('out');
+    setTimeout(() => {
+      if (els.intro.classList.contains('out')) {
+        els.intro.hidden = true;
+        els.intro.classList.remove('out');
+      }
+    }, 220);
+  }
+
+  function isLocalHost() {
+    return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  }
+
+  function showGate() {
+    showIntro(
+      '',
+      'Hold up both hands',
+      'Thumbs and index fingers out. The space between your four fingertips becomes a window of live ASCII.',
+      'Turn on camera',
+      isLocalHost() ? 'Video never leaves this computer.' : 'Frames are processed on the server and not stored.',
+    );
+  }
+
+  function gateOpen() {
+    return !els.intro.hidden && !els.start.hidden && !els.start.disabled;
+  }
+
+  function showBlocked(err) {
+    const name = err && err.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      showIntro('blocked', 'Camera is blocked', 'Allow the camera for this site in your browser\'s address bar, then try again.', 'Try again');
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      showIntro('blocked', 'No camera found', 'Connect a camera, then try again.', 'Try again');
+    } else if (name === 'NotReadableError' || name === 'AbortError') {
+      showIntro('blocked', 'Camera is in use', 'Another app may be using the camera. Close it, then try again.', 'Try again');
+    } else if (!navigator.mediaDevices?.getUserMedia) {
+      showIntro('blocked', 'Camera needs a secure page', 'Browsers only allow the camera on localhost or over HTTPS. Open this page at an https:// address.', null);
+    } else {
+      showIntro('blocked', 'Camera unavailable', `${err && err.message ? err.message : 'It could not be started'}. Try again.`, 'Try again');
+    }
+    setConn('bad', 'No camera');
+  }
+
+  /** The camera is live but there is no window yet: keep the ghost as a guide. */
+  function showGhost() {
+    if (!cameraOk || locked) return;
+    if (!els.intro.hidden && els.intro.classList.contains('waiting') && !els.intro.classList.contains('out')) return;
+    showIntro('waiting', '', '', null, '');
+  }
+
+  function scheduleGhost() {
+    if (ghostTimer || !cameraOk || locked) return;
+    ghostTimer = setTimeout(() => {
+      ghostTimer = null;
+      showGhost();
+    }, GHOST_AFTER_MS);
+  }
+
+  /** First success: once the window has held for a moment, say how to keep it. */
+  function noteWindow(shown) {
+    if (!shown) {
+      windowSince = 0;
+      return;
+    }
+    if (onboard.lockTipSeen || locked) return;
+    if (!windowSince) windowSince = performance.now();
+    if (performance.now() - windowSince >= LOCK_TIP_AFTER_MS) {
+      onboard.lockTipSeen = true;
+      saveOnboard();
+      const touch = window.matchMedia('(pointer: coarse)').matches;
+      showTip(
+        touch
+          ? 'Tap Lock to keep the window while you lower your hands.'
+          : 'Press L or tap Lock to keep the window while you lower your hands.',
+        LOCK_TIP_FOR_MS,
+      );
+    }
   }
 
   function showStatus(msg) {
@@ -460,6 +620,10 @@
     els.readoutPerf.hidden = false;
     setHint(msg.hint);
     if (msg.locked !== locked) setLocked(msg.locked);
+    const windowShown = Boolean(msg.grid);
+    if (windowShown) hideIntro();
+    else scheduleGhost();
+    noteWindow(windowShown);
   }
 
   // -------------------------------------------------------------- camera
@@ -532,7 +696,7 @@
       case 'ready':
         ready = true;
         sendSettings();
-        setConn('ok', 'Tracking');
+        setConn('ok', cameraOk ? 'Tracking' : 'Ready');
         showNotice('');
         pump();
         break;
@@ -619,15 +783,48 @@
     }
     buildUi();
     syncUi();
+    els.start.addEventListener('click', startCameraFlow);
+    connect(); // warm up hand tracking while the visitor reads the intro
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showBlocked(null);
+      return;
+    }
+    const permission = await cameraPermission();
+    if (permission === 'denied') {
+      showBlocked({ name: 'NotAllowedError' });
+    } else if (permission === 'granted' || onboard.introSeen) {
+      await startCameraFlow(); // returning visitor: straight to the video
+    } else {
+      showGate();
+    }
+  }
+
+  async function cameraPermission() {
+    try {
+      const status = await navigator.permissions.query({ name: 'camera' });
+      return status.state; // 'granted' | 'denied' | 'prompt'
+    } catch {
+      return 'unknown'; // Safari and Firefox do not expose it
+    }
+  }
+
+  async function startCameraFlow() {
+    els.start.disabled = true;
     try {
       await startCamera();
     } catch (err) {
-      showNotice(`Camera unavailable: ${err.message}. Allow camera access and reload.`);
-      setConn('bad', 'No camera');
+      els.start.disabled = false;
+      showBlocked(err);
       return;
     }
+    els.start.disabled = false;
+    onboard.introSeen = true;
+    saveOnboard();
+    showNotice('');
+    setConn(ready ? 'ok' : 'warn', ready ? 'Tracking' : 'Starting hand tracking');
+    showIntro('waiting', '', '', null, '');
     requestAnimationFrame(localPreview);
-    connect();
+    pump();
   }
 
   init();

@@ -131,6 +131,7 @@ button {
   border: 1px solid var(--line);
   font-size: 13px;
   text-align: center;
+  text-wrap: balance;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
@@ -504,6 +505,123 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 5px; }
 input[type="color"]::-moz-color-swatch { border: 0; border-radius: 5px; }
 
+/* Intro and ghost window ---------------------------------------------------- */
+/* One element plays three parts: the gate before the camera is on, the
+   blocked state when it cannot start, and a faint guide over the live
+   video ("waiting") until both hands are found. */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 72px 24px calc(var(--dock-gap) + var(--dock-height) + 28px);
+  padding-top: calc(72px + env(safe-area-inset-top));
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+.intro[hidden] { display: none; }
+.intro.out { opacity: 0; }
+.intro > * { pointer-events: auto; }
+
+.ghost {
+  width: min(300px, 76vw);
+  height: auto;
+  overflow: visible;
+  flex: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+.ghost .quad {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hold 7s ease-in-out infinite;
+}
+@keyframes hold {
+  0%, 100% { transform: rotate(-1.6deg) translateY(0); }
+  50% { transform: rotate(1.6deg) translateY(-5px); }
+}
+.ghost .outline {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.ghost .tip {
+  fill: #000;
+  stroke: #fff;
+  stroke-width: 2;
+}
+.ghost .glyph {
+  font: 11px var(--mono);
+  fill: var(--text-2);
+}
+.ghost .tag {
+  font: 11px var(--sans);
+  fill: var(--text-2);
+}
+.ghost .glyph, .ghost .tag {
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+
+.intro-title {
+  margin: 22px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.intro-copy {
+  margin: 8px 0 0;
+  max-width: 36ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-wrap: balance;
+}
+.cta {
+  margin-top: 22px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--text);
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.cta:hover { background: #fff; }
+.cta:active { transform: translateY(1px); }
+.cta:focus-visible { outline-offset: 3px; }
+.cta[hidden] { display: none; }
+.intro-note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.intro-note:empty { display: none; }
+
+/* Camera is live; only the drawing stays, as a faint guide over the video. */
+.intro.waiting { pointer-events: none; }
+.intro.waiting > :not(.ghost) { display: none; }
+.intro.waiting .ghost { opacity: 0.65; }
+.intro.waiting .ghost .glyph { fill: var(--text); }
+
+/* Camera could not start: the drawing dims and stops moving. */
+.intro.blocked .ghost { opacity: 0.35; }
+.intro.blocked .ghost .quad { animation: none; }
+
+@media (max-width: 560px) {
+  .intro-title { font-size: 16px; }
+}
+
 /* Narrow screens ------------------------------------------------------------ */
 
 @media (max-width: 560px) {
@@ -528,5 +646,7 @@ input[type="color"]::-moz-color-swatch { border: 0; border-radius: 5px; }
 
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }
+  .ghost .quad { animation: none; }
+  .intro { transition: none; }
   .tool, .switch .track, .switch .track::after, .presets button { transition: none; }
 }
