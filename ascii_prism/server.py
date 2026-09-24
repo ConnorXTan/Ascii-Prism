@@ -40,6 +40,16 @@ JPEG_QUALITY = 82
 app = FastAPI(title="ASCII Prism", version=__version__)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+
+@app.middleware("http")
+async def no_stale_assets(request, call_next):
+    """Make browsers revalidate every response. Without this, Chrome keeps a
+    cached script or stylesheet for hours after an update and runs the old
+    one against the new page, which breaks it silently."""
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="prism")
 _font = find_font()
 _model_path: Path | None = None
