@@ -84,7 +84,7 @@ class Pipeline:
     @property
     def lens(self) -> Lens:
         """The active lens, created on first use and swapped when the setting changes."""
-        wanted = getattr(self.settings, "lens", DEFAULT_LENS_ID)
+        wanted = self.settings.lens
         if self._lens is None or self._lens.id != wanted:
             cls = by_id(wanted) or by_id(DEFAULT_LENS_ID)
             if self._lens is not None:

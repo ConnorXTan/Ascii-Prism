@@ -3,7 +3,10 @@ import pytest
 
 from ascii_prism import lenses
 from ascii_prism.ascii import AsciiRenderer, find_font
+from ascii_prism.hands import Hand
 from ascii_prism.lenses.ascii import AsciiLens
+from ascii_prism.lenses.thermal import ThermalLens
+from ascii_prism.pipeline import Pipeline
 from ascii_prism.settings import Settings
 
 QUAD = np.array([[40, 30], [280, 40], [270, 200], [30, 190]], dtype=np.float64)
@@ -46,3 +49,79 @@ def test_too_small_quad_draws_nothing(renderer):
     drawn, region = lenses.render_lens(AsciiLens(), frame, [(0, 0), (5, 0), (5, 5), (0, 5)], Settings(), context(renderer, frame))
     assert not drawn and region is None
     assert (frame == 120).all()
+
+
+class FakeTracker:
+    def __init__(self, hands):
+        self.hands = hands
+
+    def detect(self, frame_rgb, timestamp_ms, mirrored=True):
+        return self.hands
+
+
+def make_hand(index, thumb, handedness="Right"):
+    centre = ((index[0] + thumb[0]) / 2, (index[1] + thumb[1]) / 2)
+    return Hand(thumb=thumb, index=index, wrist=centre, center=centre, handedness=handedness, facing="palm")
+
+
+TWO_HANDS = [make_hand((0.2, 0.2), (0.2, 0.8), "Left"), make_hand((0.8, 0.2), (0.8, 0.8))]
+
+
+class CountingLens(ThermalLens):
+    id = "counting"
+    resets = 0
+
+    def reset(self):
+        CountingLens.resets += 1
+
+
+def test_thermal_lens_paints_pixels_without_a_grid(renderer):
+    frame = np.full((240, 320, 3), 200, dtype=np.uint8)
+    drawn, region = lenses.render_lens(ThermalLens(), frame, QUAD, Settings(), context(renderer, frame))
+    assert drawn and region is None
+    assert not (frame[100, 150] == 200).all()  # inside the quad is false colour now
+    assert (frame[5, 5] == 200).all()
+
+
+def test_pipeline_switches_lens_and_resets_the_old_one(renderer, monkeypatch):
+    monkeypatch.setattr(lenses, "LENSES", lenses.LENSES + [CountingLens])
+    settings = Settings(mirror=False, show_tips=False, smoothing=0, lens="counting")
+    pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, settings)
+    frame = np.full((240, 320, 3), 150, dtype=np.uint8)
+    CountingLens.resets = 0
+    first = pipeline.process(frame, 0)
+    assert first.lens == "counting" and first.region is None and first.hint == ""
+    assert isinstance(pipeline.lens, CountingLens)
+
+    settings.lens = "ascii"
+    second = pipeline.process(frame, 33)
+    assert second.lens == "ascii" and second.region is not None
+    assert CountingLens.resets == 1  # the outgoing lens was reset once
+    assert not np.array_equal(first.frame, second.frame)
+
+    settings.lens = "no-such-lens"
+    settings.clamp()
+    assert settings.lens == "ascii"
+    assert pipeline.process(frame, 66).lens == "ascii"
+
+
+def test_locked_window_survives_a_lens_switch(renderer):
+    settings = Settings(mirror=False, show_tips=False, smoothing=0)
+    pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, settings)
+    frame = np.full((240, 320, 3), 150, dtype=np.uint8)
+    pipeline.process(frame, 0)
+    assert pipeline.toggle_lock() is True
+    pipeline.tracker = FakeTracker([])
+    settings.lens = "thermal"
+    result = pipeline.process(frame, 33)
+    assert result.locked and result.hands == 0 and result.lens == "thermal"
+    assert result.quad is not None and not (result.frame[120, 160] == 150).all()
+
+
+def test_mirror_change_resets_the_lens(renderer, monkeypatch):
+    monkeypatch.setattr(lenses, "LENSES", lenses.LENSES + [CountingLens])
+    pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, Settings(show_tips=False, lens="counting"))
+    pipeline.process(np.zeros((240, 320, 3), np.uint8), 0)
+    CountingLens.resets = 0
+    pipeline.reset_tracking()
+    assert CountingLens.resets == 1

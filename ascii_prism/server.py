@@ -29,6 +29,7 @@ from . import __version__
 from .ascii import AsciiRenderer, find_font
 from .charsets import CHARSETS
 from .hands import HandTracker
+from .lenses import LENSES
 from .model import ensure_model
 from .pipeline import Pipeline
 from .settings import RANGES, Settings
@@ -79,6 +80,7 @@ async def config() -> dict:
     """Presets, defaults and ranges, so the page has a single source of truth."""
     return {
         "charsets": [{"id": cs.id, "label": cs.label, "chars": cs.chars} for cs in CHARSETS],
+        "lenses": [{"id": lens.id, "label": lens.label, "blurb": lens.blurb} for lens in LENSES],
         "defaults": asdict(Settings()),
         "ranges": {name: list(bounds) for name, bounds in RANGES.items()},
         "version": __version__,
@@ -137,6 +139,7 @@ class Session:
             "handInfo": [{"hand": h.handedness, "facing": h.facing} for h in result.hand_info],
             "twisted": result.twisted,
             "grid": [result.region.cols, result.region.rows] if result.region else None,
+            "lens": result.lens,
             "hint": result.hint,
             "locked": result.locked,
             "ms": round((time.perf_counter() - t0) * 1000, 1),
