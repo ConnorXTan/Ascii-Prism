@@ -1,14 +1,16 @@
+import cv2
 import numpy as np
 import pytest
 
 from ascii_prism import lenses
 from ascii_prism.ascii import AsciiRenderer, find_font
 from ascii_prism.hands import Hand
-from ascii_prism.lenses import looks
+from ascii_prism.lenses import looks, person as person_module
 from ascii_prism.lenses.ascii import AsciiLens
 from ascii_prism.lenses.gameboy import GameboyLens
 from ascii_prism.lenses.kaleido import KaleidoLens
 from ascii_prism.lenses.night import NightLens
+from ascii_prism.lenses.person import PersonLens
 from ascii_prism.lenses.rain import RainLens
 from ascii_prism.lenses.sketch import SketchLens
 from ascii_prism.lenses.thermal import ThermalLens
@@ -202,3 +204,40 @@ def test_gameboy_lens_paints_the_palette(renderer):
     assert (inside >= lo).all() and (inside <= hi).all()  # the warp blends neighbours but stays in range
     assert (inside[:, 1] >= inside[:, 0]).all() and (inside[:, 1] > inside[:, 2]).all()  # every pixel is green
     assert sum((inside == tone).all(axis=1).sum() for tone in looks.GB_PALETTE) > len(inside) // 20  # block centres stay exact
+
+
+def test_person_lens_shows_characters_when_the_segmenter_is_missing(renderer, monkeypatch):
+    def unavailable(log=None):
+        raise OSError("offline")
+
+    monkeypatch.setattr(person_module, "ensure_segmenter", unavailable)
+    lens = PersonLens()
+    frame = np.full((240, 320, 3), 150, dtype=np.uint8)
+    got = frame.copy()
+    drawn, region = lenses.render_lens(lens, got, QUAD, Settings(), context(renderer, got))
+    want = frame.copy()
+    lenses.render_lens(AsciiLens(), want, QUAD, Settings(), context(renderer, want))
+    assert drawn and region is not None and lens._unavailable
+    assert np.array_equal(got, want)
+
+
+def test_person_lens_keeps_the_room_as_video(renderer, hands_photo):
+    try:
+        looks.ensure_segmenter(log=lambda *_: None)
+    except OSError:
+        pytest.skip("segmentation model unavailable (offline?)")
+    photo = cv2.imread(str(hands_photo))
+    quad = np.array([[150, 370], [590, 400], [575, 700], [140, 670]], dtype=np.float64)
+    lens = PersonLens()
+    out = photo.copy()
+    drawn, region = lenses.render_lens(lens, out, quad, Settings(mirror=False), context(renderer, out))
+    assert drawn and region is not None
+    wall = (slice(420, 450), slice(530, 570))  # inside the window, right of her hair
+    face = (slice(500, 540), slice(300, 340))
+    assert np.abs(out[wall].astype(int) - photo[wall].astype(int)).mean() < 10
+    assert np.abs(out[face].astype(int) - photo[face].astype(int)).mean() > 25
+    inverted = photo.copy()
+    lenses.render_lens(lens, inverted, quad, Settings(mirror=False, person_invert=True), context(renderer, inverted))
+    assert np.abs(inverted[wall].astype(int) - (255 - photo[wall].astype(int))).mean() < 10
+    lens.reset()
+    assert lens._mask is None

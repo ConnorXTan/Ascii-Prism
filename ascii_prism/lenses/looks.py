@@ -396,9 +396,11 @@ def ensure_segmenter(log=print) -> Path:
 
 
 class PersonMask:
-    """MediaPipe selfie segmentation on a whole frame. Calling it returns a
-    float32 mask in 0..1 at the frame's size, 1 where there is a person.
-    About 5 ms at the default working width."""
+    """MediaPipe selfie segmentation. Calling it returns a float32 mask in
+    0..1 at the frame's size, 1 where there is a person. With `roi`
+    (x0, y0, x1, y1) only that box is segmented and the rest is 0, which
+    spends the model's 256 px on the window rather than the whole frame.
+    About 5 ms per call."""
 
     def __init__(self, model: Path | str):
         import mediapipe as mp
@@ -414,28 +416,34 @@ class PersonMask:
         )
         self._seg = vision.ImageSegmenter.create_from_options(options)
 
-    def __call__(self, frame_bgr: np.ndarray, work_w: int = 256) -> np.ndarray:
+    def __call__(self, frame_bgr: np.ndarray, roi: tuple[int, int, int, int] | None = None, work_w: int = 256) -> np.ndarray:
         h, w = frame_bgr.shape[:2]
-        sw = min(w, work_w)
-        sh = max(1, int(round(h * sw / w)))
-        small = cv2.resize(frame_bgr, (sw, sh), interpolation=cv2.INTER_AREA)
+        x0, y0, x1, y1 = roi if roi is not None else (0, 0, w, h)
+        crop = frame_bgr[y0:y1, x0:x1]
+        ch, cw = crop.shape[:2]
+        sw = min(cw, work_w)
+        sh = max(1, int(round(ch * sw / cw)))
+        small = cv2.resize(crop, (sw, sh), interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
         image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
         masks = self._seg.segment(image).confidence_masks
         m = np.asarray(masks[-1].numpy_view(), dtype=np.float32).reshape(sh, sw)
-        return cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
+        if roi is None:
+            return cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
+        mask = np.zeros((h, w), dtype=np.float32)
+        mask[y0:y1, x0:x1] = cv2.resize(m, (cw, ch), interpolation=cv2.INTER_LINEAR)
+        return mask
 
     def close(self) -> None:
         self._seg.close()
 
 
-def person_look(sampled: np.ndarray, mask_flat: np.ndarray, grid: Grid, renderer: AsciiRenderer,
-                chars: str = DEFAULT_CHARS, invert_bg: bool = False, feather: float = 0.15) -> np.ndarray:
-    """ASCII where the mask says person, the video (or its negative) elsewhere.
-
-    `mask_flat` is the person mask sampled through the same warp as `sampled`.
-    """
-    glyphs = ascii_look(sampled, grid, renderer, chars)
+def person_blend(glyphs: np.ndarray, sampled: np.ndarray, mask_flat: np.ndarray,
+                 invert_bg: bool = False, feather: float = 0.15) -> np.ndarray:
+    """`glyphs` where the mask says person, the sampled video (or its
+    negative) elsewhere. `mask_flat` is the person mask sampled through the
+    same warp as `sampled`; the edge is feathered so the segmenter's low
+    resolution does not show as a staircase."""
     h, w = glyphs.shape[:2]
     video = cv2.resize(sampled, (w, h), interpolation=cv2.INTER_LINEAR)
     if invert_bg:
@@ -443,3 +451,9 @@ def person_look(sampled: np.ndarray, mask_flat: np.ndarray, grid: Grid, renderer
     m = cv2.resize(mask_flat, (w, h), interpolation=cv2.INTER_LINEAR)
     m = np.clip((m - 0.5 + feather) / (2 * feather), 0.0, 1.0)[..., None]
     return to_u8(video.astype(np.float32) / 255.0 * (1 - m) + glyphs.astype(np.float32) / 255.0 * m)
+
+
+def person_look(sampled: np.ndarray, mask_flat: np.ndarray, grid: Grid, renderer: AsciiRenderer,
+                chars: str = DEFAULT_CHARS, invert_bg: bool = False, feather: float = 0.15) -> np.ndarray:
+    """ASCII where the mask says person, the video elsewhere, ungraded."""
+    return person_blend(ascii_look(sampled, grid, renderer, chars), sampled, mask_flat, invert_bg, feather)

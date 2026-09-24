@@ -155,6 +155,10 @@ def test_segmenter_finds_the_person(hands_photo, segmenter_model):
     quad = np.array([[150, 370], [590, 400], [575, 700], [140, 670]], dtype=np.float64)
     mask_flat = sample_quad(mask, quad, 90, 60)
     assert mask_flat.shape == (60, 90) and mask_flat.max() > 0.9
+    boxed = looks.PersonMask(segmenter_model)(photo, roi=(100, 300, 600, 800))
+    assert boxed.shape == photo.shape[:2]
+    assert boxed[:80, :80].max() == 0 and boxed[850:, :].max() == 0  # outside the box is untouched
+    assert boxed[480:560, 260:340].mean() > 0.9
 
 
 def test_rain_resize_keeps_the_overlap(renderer, grid):
