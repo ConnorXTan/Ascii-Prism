@@ -1,0 +1,27 @@
+# Vercel builds this image and runs it as a Function (container image).
+# MediaPipe's OpenCV build needs libGL and GLib at import time, the renderer
+# wants a monospace TrueType font, and the hand model is baked in at build
+# time so a cold start never has to download it.
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    ASCII_PRISM_MODEL=/app/models/hand_landmarker.task
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 libportaudio2 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY ascii_prism ./ascii_prism
+RUN python -c "from ascii_prism.model import ensure_model; ensure_model()"
+
+EXPOSE 80
+# Vercel routes traffic to port 80 unless PORT is set in the project settings.
+CMD ["sh", "-c", "exec uvicorn ascii_prism.server:app --host 0.0.0.0 --port ${PORT:-80} --log-level warning"]
