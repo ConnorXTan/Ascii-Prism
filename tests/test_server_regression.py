@@ -3,13 +3,30 @@
 # while the readout still said "Tracking".
 # Found by /qa on 2026-09-24
 # Report: .gstack/qa-reports/qa-report-localhost-2026-09-24.md
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
-from ascii_prism.server import app
+from ascii_prism import server
 
 
-def test_undecodable_frame_still_gets_a_reply(hand_model):
-    client = TestClient(app)
+class FakeTracker:
+    """Stands in for MediaPipe so the socket contract can be tested without the model."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def detect(self, frame_rgb, timestamp_ms, mirrored=True):
+        return []
+
+    def close(self):
+        pass
+
+
+def test_undecodable_frame_still_gets_a_reply(monkeypatch):
+    monkeypatch.setattr(server, "HandTracker", FakeTracker)
+    monkeypatch.setattr(server, "get_model", lambda: Path("unused.task"))
+    client = TestClient(server.app)
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json() == {"type": "ready"}
         ws.send_bytes(b"\x01\x02\x03\x04")  # not a JPEG
