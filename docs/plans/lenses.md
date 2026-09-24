@@ -1,6 +1,6 @@
 # Lenses: the window as a portal
 
-Status: planned, not started. Written 2026-09-24.
+Status: looks prototyped and tuned (see Preview findings at the end); pipeline work not started. Written 2026-09-24.
 
 ## Why
 
@@ -235,3 +235,74 @@ with two hands, a synthetic frame, `show_tips=False`, `smoothing=0`.
 2. Should `echo` be ASCII (as planned) or raw video? ASCII keeps the app's
    identity; raw video is spookier. Could be a toggle later.
 3. Wipe or pinky flag for gesture switching, to be decided on camera.
+
+## Preview findings
+
+Written 2026-09-24, before Phase 0, from a prototype of every look rendered
+into the same fingertip window on the sample photo (`tests/.cache/hands.jpg`,
+doubled to 1280 wide and lifted to webcam exposure). `lenses-preview.jpg`
+next to this file is the contact sheet and `lenses-hero.jpg` shows four of
+the looks in the full frame. Both come from `tools/lens_sheet.py`, which can
+be re-run whenever a look is retuned.
+
+What exists already, all new files and nothing the pipeline imports yet:
+
+- `ascii_prism/warp.py`: `sample_quad` and `paste_quad` exactly as specified
+  above, lifted from `AsciiRenderer.render`, plus the scaled-quad path for
+  small history frames. Phase 0 can make `render` call these.
+- `ascii_prism/lenses/looks.py`: every look as a pure function on the flat
+  image (`thermal`, `gameboy`, `sketch`, `night`, `kaleido_remap`,
+  `mirror_remap`, `ascii_look`, `person_look`), the stateful `Rain`, the
+  `FixedCellAtlas` the rain needs, `PersonMask` around the segmenter, and
+  `grid_for`, which sizes the cell grid the way `render` does. The `Lens`
+  classes wrap these; their `paint` bodies are one or two lines each.
+- `tests/test_warp.py` and `tests/test_looks.py`: the tests listed under
+  Tests above, model-free except for one segmenter test that skips offline.
+
+Decisions the preview settles:
+
+- **Rain glyphs (open question 1).** Menlo, Monaco and Courier New all draw
+  half-width katakana as tofu. Hiragino Sans has them on macOS; Noto Sans
+  CJK and MS Gothic are the Linux and Windows candidates. `rain_glyphs()`
+  picks katakana when such a font exists and falls back to Latin in the
+  renderer's own font. At 12 x 18 px glyphs katakana is unmistakably the
+  Matrix; Latin reads as generic code. Ship katakana with the fallback.
+- **Rain on a dark room.** Scaling the trail purely by luminance leaves a
+  dark scene empty. `Rain.paint(lift=0.07)` keeps a faint drizzle
+  everywhere and lets bright shapes glow through at full strength.
+- **Thermal.** Luminance alone made a white jumper hotter than a face.
+  Adding red-over-blue as warmth (`skin=0.5`) makes skin the hottest thing
+  in the window, which is what a thermal camera looks like to people.
+- **Echo (open question 2).** ASCII echo is just a darker ASCII on a still;
+  raw video echo reads instantly as "the past" because the mismatch at the
+  window edge is visible. Default echo to raw video, keep ASCII as a toggle
+  later if wanted.
+- **Kaleido.** A 6-fold ASCII fold is abstract and dim. The 4-way mirror on
+  raw video (the four-eyed face) is the one everyone recognises. Make
+  `kaleido` the 4-way mirror on video; `kaleido_remap` stays for a later
+  variant.
+- **Person.** The selfie segmenter returns one confidence mask (1 = person),
+  about 5 ms at 256 px wide. Feathering the mask edge by 0.15 hides the
+  256 px staircase. `looks.ensure_segmenter` caches the model next to the
+  hand model; fold it into `model.py`'s table when the lens is wired in.
+- **Sample sizes.** Pixel looks (thermal, gameboy, sketch, night, echo
+  video, mirror) want the quad sampled at its own pixel size, capped around
+  480 px wide; glyph looks keep today's cols x 3 by rows x 3 supersample.
+- **Font.** `AsciiRenderer()` with no path uses Pillow's bitmap font; every
+  caller must pass `find_font()` as `server.py` does, or glyphs come out
+  3 px wide.
+
+Cost of each look on an 877 x 601 quad in a 1280 x 1920 frame, Apple
+Silicon, including `paste_quad` (about 10 ms of every figure is the
+existing warp and paste; the ASCII look today costs 30 ms on this quad):
+
+| look | ms | look | ms |
+|---|---|---|---|
+| thermal | 19 | person (plus 5 for the segmenter) | 24 |
+| echo, video | 14 | night | 30 |
+| rain, katakana | 25 | kaleido, 6 fold ASCII | 19 |
+| gameboy | 17 | kaleido, mirror video | 14 |
+| sketch | 28 | | |
+
+Sketch and night are the heavy ones at full quad resolution; sampling them
+at half size brings both under the 5 ms target from the Performance section.
