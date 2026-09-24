@@ -439,15 +439,7 @@
   }
 
   function showStatus(msg) {
-    const info = (msg.handInfo || []).map((h) => `${h.hand[0]} ${h.facing}`).join(' · ');
-    els.readoutHands.innerHTML = '';
-    els.readoutHands.append(`${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`);
-    if (info) {
-      const dim = document.createElement('span');
-      dim.className = 'dim';
-      dim.textContent = `  ${info}`;
-      els.readoutHands.append(dim);
-    }
+    els.readoutHands.textContent = `${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`;
     if (msg.grid) {
       els.readoutGrid.textContent = `${msg.grid[0]} × ${msg.grid[1]}${msg.twisted ? ' · twisted' : ''}`;
       els.readoutGrid.hidden = false;

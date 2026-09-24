@@ -99,10 +99,8 @@ The video fills the page. The dock at the bottom opens one panel at a time:
   characters over the live video, *Brightness* is a gain on the sampled
   colours, and *Backdrop* is the colour behind the characters.
 - **Tracking.** *Smoothing* damps fingertip jitter; higher values are
-  steadier but lag more. *Fingertips* draws the four points, the outline and
-  a label per hand: L or R for which side of the screen it is on (the hand
-  further left is L, so crossed arms swap them) and whether its palm or its
-  back faces the camera. *Mirror* flips the camera like a mirror.
+  steadier but lag more. *Fingertips* draws the four points and the
+  outline. *Mirror* flips the camera like a mirror.
 
 **Lock** freezes the current window so you can lower your hands, and
 **Fullscreen** does what it says.

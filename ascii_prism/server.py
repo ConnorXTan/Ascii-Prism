@@ -136,7 +136,6 @@ class Session:
         status = {
             "type": "status",
             "hands": result.hands,
-            "handInfo": [{"hand": h.handedness, "facing": h.facing} for h in result.hand_info],
             "twisted": result.twisted,
             "grid": [result.region.cols, result.region.rows] if result.region else None,
             "hint": result.hint,

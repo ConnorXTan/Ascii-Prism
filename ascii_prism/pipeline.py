@@ -21,16 +21,9 @@ HINT_SMALL = "Move your hands apart to open a larger window."
 
 
 @dataclass
-class HandInfo:
-    handedness: str
-    facing: str
-
-
-@dataclass
 class FrameResult:
     frame: np.ndarray
     hands: int
-    hand_info: list[HandInfo]
     tips: np.ndarray  # (N, 2) fingertip pixels in display space
     quad: np.ndarray | None
     region: RegionInfo | None
@@ -115,12 +108,11 @@ class Pipeline:
             self._last_quad = None
 
         if s.show_tips:
-            self._draw_overlay(frame, hands, tips, quad)
-        info = [HandInfo(hand.handedness, hand.facing) for hand in hands[:2]]
+            self._draw_overlay(frame, tips, quad)
         twisted = bool(quad is not None and is_twisted(quad))
-        return FrameResult(frame, len(hands), info, tips, quad, region, twisted, hint, self.locked)
+        return FrameResult(frame, len(hands), tips, quad, region, twisted, hint, self.locked)
 
-    def _draw_overlay(self, frame: np.ndarray, hands: list[Hand], tips: np.ndarray, quad: np.ndarray | None) -> None:
+    def _draw_overlay(self, frame: np.ndarray, tips: np.ndarray, quad: np.ndarray | None) -> None:
         h, w = frame.shape[:2]
         scale = max(1.0, w / 640)
         thick = max(1, int(round(1.5 * scale)))
@@ -132,11 +124,3 @@ class Pipeline:
             centre = (int(round(x)), int(round(y)))
             cv2.circle(frame, centre, int(6 * scale), (0, 0, 0), -1, cv2.LINE_AA)
             cv2.circle(frame, centre, int(6 * scale), (255, 255, 255), thick, cv2.LINE_AA)
-        for hand in hands[:2]:
-            label = f"{hand.handedness[:1]} {hand.facing}"
-            x = int(round(hand.wrist[0] * w))
-            y = int(round(hand.wrist[1] * h)) + int(22 * scale)
-            x = min(max(x - int(18 * scale), 0), w - int(70 * scale))
-            y = min(y, h - 4)
-            cv2.putText(frame, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, (0, 0, 0), thick * 3, cv2.LINE_AA)
-            cv2.putText(frame, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5 * scale, (255, 255, 255), thick, cv2.LINE_AA)
