@@ -53,7 +53,8 @@ python -m ascii_prism --host 0.0.0.0         # reachable from other devices (see
 ```
 
 Keys on the page: `L` locks or unlocks the current window so you can lower
-your hands, `H` hides the customizer, `F` goes fullscreen.
+your hands, `H` hides the controls, `F` goes fullscreen, `Esc` closes an
+open panel.
 
 Browsers only allow camera access on `localhost` or over HTTPS. To use the
 site from a phone or another computer on your network, put it behind an
@@ -80,22 +81,29 @@ non-convex shape) the window is hidden until you spread them out again.
 When fewer than two hands are visible the window disappears and you see
 plain video.
 
-## Customizer
+## Controls
+
+The video fills the page. The dock at the bottom opens one panel at a time:
 
 - **Characters.** Pick a preset ramp or type your own. Characters are ordered
   from darkest to brightest; each cell picks the character whose position in
-  the ramp matches its brightness. Block characters work.
-- **Invert brightness.** Flip the ramp, useful for light backgrounds.
-- **Characters across.** How many character columns the window has, from 16
-  to 200. Rows are derived from the window's shape so characters keep their
-  natural proportions.
-- **Colour.** *Video colours* tints each character with the average colour of
-  the video it replaces. *Vivid* normalises those colours so dark cells still
-  read clearly. *Single colour* uses one ink colour. The background colour
-  applies in all modes.
-- **Smoothing.** Damps fingertip jitter. Higher values are steadier but lag
-  more.
-- **Show fingertips and outline** and **Mirror camera** do what they say.
+  the ramp matches its brightness. Block characters work. *Invert* flips the
+  ramp, useful for light backgrounds.
+- **Grid.** How many character columns the window has, from 16 to 200. Rows
+  are derived from the window's shape so characters keep their natural
+  proportions.
+- **Colour.** Every character takes the average colour of the video it
+  replaces, then goes through the colour wheel: the angle of the handle
+  rotates hue and its distance from the centre sets saturation (the thin
+  ring marks the video as-is, the centre is greyscale). *Opacity* blends the
+  characters over the live video, *Brightness* is a gain on the sampled
+  colours, and *Backdrop* is the colour behind the characters.
+- **Tracking.** *Smoothing* damps fingertip jitter; higher values are
+  steadier but lag more. *Fingertips* draws the four points and the
+  outline. *Mirror* flips the camera like a mirror.
+
+**Lock** freezes the current window so you can lower your hands, and
+**Fullscreen** does what it says.
 
 Settings are kept in the browser's `localStorage` and sent to the server on
 every change.
