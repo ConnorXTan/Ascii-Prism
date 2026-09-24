@@ -59,7 +59,7 @@ class Lens:
     needs_history = False  # the pipeline keeps a frame ring buffer only if True
     uses: tuple[str, ...] = ()  # lens-specific Settings fields, shown in the panel only for this lens
 
-    def source(self, ctx: LensContext) -> np.ndarray:
+    def source(self, ctx: LensContext, settings: Settings) -> np.ndarray:
         """Which frame the quad is sampled from. Default: the live one."""
         return ctx.frame
 
@@ -87,7 +87,7 @@ def render_lens(lens: Lens, frame: np.ndarray, quad, settings: Settings, ctx: Le
     size = lens.sample_size(quad, settings, ctx)
     if size is None:
         return False, None
-    sampled = sample_quad(lens.source(ctx), quad, *size, frame_shape=frame.shape)
+    sampled = sample_quad(lens.source(ctx, settings), quad, *size, frame_shape=frame.shape)
     flat, region = lens.paint(sampled, quad, settings, ctx)
     if paste_quad(frame, quad, flat, settings.opacity) is None:
         return False, None

@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from .ascii import AsciiLens
 from .base import Lens, LensContext, render_lens
+from .echo import EchoLens
 from .thermal import ThermalLens
 
-LENSES: list[type[Lens]] = [AsciiLens, ThermalLens]
+LENSES: list[type[Lens]] = [AsciiLens, ThermalLens, EchoLens]
 DEFAULT_LENS_ID = AsciiLens.id
 
 

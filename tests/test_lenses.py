@@ -125,3 +125,33 @@ def test_mirror_change_resets_the_lens(renderer, monkeypatch):
     CountingLens.resets = 0
     pipeline.reset_tracking()
     assert CountingLens.resets == 1
+
+
+def test_echo_shows_the_past_and_only_keeps_history_when_needed(renderer):
+    settings = Settings(mirror=False, show_tips=False, smoothing=0, lens="echo", delay=0.5)
+    pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, settings)
+    red = np.zeros((240, 320, 3), np.uint8)
+    red[:] = (0, 0, 255)
+    blue = np.zeros_like(red)
+    blue[:] = (255, 0, 0)
+    first = pipeline.process(red, 0)
+    assert pipeline.history_size() == 1
+    assert tuple(first.frame[120, 160]) == (0, 0, 255)  # nothing older yet: shows live
+    for t in range(1, 16):
+        result = pipeline.process(blue, t * 100)
+    assert tuple(result.frame[120, 160]) == (255, 0, 0)  # 1.5 s of blue: the past is blue too
+    assert pipeline.history_size() <= 11  # delay 0.5 s plus the margin, at 10 fps
+    result = pipeline.process(red, 1600)
+    assert tuple(result.frame[120, 160]) == (255, 0, 0)  # 0.5 s ago it was still blue
+    assert tuple(result.frame[5, 5]) == (0, 0, 255)  # outside the window is live
+
+    settings.lens = "ascii"
+    pipeline.process(red, 1700)
+    assert pipeline.history_size() == 0  # ascii does not need the buffer
+
+
+def test_history_frames_are_stored_small(renderer):
+    settings = Settings(mirror=False, show_tips=False, smoothing=0, lens="echo")
+    pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, settings)
+    pipeline.process(np.zeros((720, 1280, 3), np.uint8), 0)
+    assert pipeline._history[0][1].shape == (360, 640, 3)
