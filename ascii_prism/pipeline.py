@@ -81,7 +81,7 @@ class Pipeline:
         hands: list[Hand] = []
         if self.tracker is not None:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            hands = self.tracker.detect(rgb, timestamp_ms, mirrored=s.mirror)
+            hands = self.tracker.detect(rgb, timestamp_ms)
         tips = np.array(
             [[p[0] * w, p[1] * h] for hand in hands[:2] for p in (hand.thumb, hand.index)],
             dtype=np.float64,

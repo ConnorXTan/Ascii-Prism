@@ -1,9 +1,16 @@
 """Thin wrapper around MediaPipe's Hand Landmarker.
 
 Returns, for every detected hand, the fingertips the app needs plus a few
-palm landmarks, which hand it is, and whether the palm or the back of the
-hand faces the camera. Coordinates are normalized (0..1, origin top-left)
-in the frame that was passed in.
+palm landmarks, which side of the frame the hand is on, and whether the palm
+or the back of the hand faces the camera. Coordinates are normalized (0..1,
+origin top-left) in the frame that was passed in.
+
+Left and right come from position, not from MediaPipe's handedness
+classifier: with two hands the one further left on screen is "Left", and a
+lone hand is labelled by which half of the frame it is in. That is what the
+viewer sees, it is the same whether or not the frame is mirrored, and it
+does not depend on a classifier that is easily confused by the back of a
+hand. Crossed arms therefore swap the labels.
 """
 
 from __future__ import annotations
@@ -28,24 +35,38 @@ class Hand:
     index: Point
     wrist: Point
     center: Point
-    handedness: str  # "Left" or "Right": the person's own hand
-    facing: str  # "palm" or "back": which side faces the camera
+    handedness: str  # "Left" or "Right": which side of the frame the hand is on
+    facing: str  # "palm" or "back": which side of the hand faces the camera
 
 
-def hand_facing(wrist: Point, index_mcp: Point, pinky_mcp: Point, raw_label: str) -> str:
+def sides_for(centers_x: list[float]) -> list[str]:
+    """"Left"/"Right" for each hand from its horizontal position.
+
+    Two or more hands: the leftmost is "Left" and the others "Right". One
+    hand: whichever half of the frame it is in.
+    """
+    if len(centers_x) == 1:
+        return ["Left" if centers_x[0] < 0.5 else "Right"]
+    leftmost = int(np.argmin(centers_x)) if centers_x else -1
+    return ["Left" if i == leftmost else "Right" for i in range(len(centers_x))]
+
+
+def hand_facing(wrist: Point, index_mcp: Point, pinky_mcp: Point, side: str) -> str:
     """Palm or back, from the winding of wrist -> index knuckle -> pinky knuckle.
 
-    MediaPipe labels handedness as if the image were a selfie (mirrored). In
-    such an image a right hand with its palm to the camera has the index
-    knuckle left of the pinky knuckle, which makes this cross product
-    positive; the back of the hand flips the sign, and a left hand flips it
-    again. Using MediaPipe's own label with the image as given keeps the
-    result correct whether or not the frame is mirrored.
+    `side` is where the hand is on screen. Hold both hands up with palms to
+    the camera and the thumbs point at each other: on the right-hand side of
+    the frame the index knuckle is left of the pinky knuckle, which makes
+    this cross product positive; the back of the hand flips the sign, and
+    the other side of the frame flips it again. Mirroring the frame moves
+    the hand to the other side and flips the winding, so the answer is the
+    same either way. The rule is rotation invariant, so it holds with
+    fingers pointing sideways or down.
     """
     ax, ay = index_mcp[0] - wrist[0], index_mcp[1] - wrist[1]
     bx, by = pinky_mcp[0] - wrist[0], pinky_mcp[1] - wrist[1]
     cross = ax * by - ay * bx
-    return "palm" if (cross > 0) == (raw_label == "Right") else "back"
+    return "palm" if (cross > 0) == (side == "Right") else "back"
 
 
 class HandTracker:
@@ -66,37 +87,28 @@ class HandTracker:
         self._landmarker = vision.HandLandmarker.create_from_options(options)
         self._last_ts = -1
 
-    def detect(self, frame_rgb: np.ndarray, timestamp_ms: int, mirrored: bool = True) -> list[Hand]:
-        """Run detection on an RGB frame.
-
-        `mirrored` says whether the frame is selfie-style (already flipped).
-        MediaPipe assumes it is; for a raw camera frame the labels are swapped.
-        Timestamps must increase; we enforce it.
-        """
+    def detect(self, frame_rgb: np.ndarray, timestamp_ms: int) -> list[Hand]:
+        """Run detection on an RGB frame. Timestamps must increase; we enforce it."""
         timestamp_ms = int(timestamp_ms)
         if timestamp_ms <= self._last_ts:
             timestamp_ms = self._last_ts + 1
         self._last_ts = timestamp_ms
         image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame_rgb))
         result = self._landmarker.detect_for_video(image, timestamp_ms)
+        landmarks = [[(p.x, p.y) for p in lm] for lm in result.hand_landmarks]
+        centers = [(float(np.mean([p[0] for p in lm])), float(np.mean([p[1] for p in lm]))) for lm in landmarks]
+        sides = sides_for([c[0] for c in centers])
         hands = []
-        for i, lm in enumerate(result.hand_landmarks):
-            raw_label = "Unknown"
-            if result.handedness and result.handedness[i]:
-                raw_label = result.handedness[i][0].category_name
-            pt = lambda idx: (lm[idx].x, lm[idx].y)  # noqa: E731
-            wrist, index_mcp, pinky_mcp = pt(WRIST), pt(INDEX_MCP), pt(PINKY_MCP)
-            label = raw_label
-            if not mirrored and raw_label in ("Left", "Right"):
-                label = "Right" if raw_label == "Left" else "Left"
+        for lm, center, side in zip(landmarks, centers, sides):
+            wrist, index_mcp, pinky_mcp = lm[WRIST], lm[INDEX_MCP], lm[PINKY_MCP]
             hands.append(
                 Hand(
-                    thumb=pt(THUMB_TIP),
-                    index=pt(INDEX_TIP),
+                    thumb=lm[THUMB_TIP],
+                    index=lm[INDEX_TIP],
                     wrist=wrist,
-                    center=(float(np.mean([p.x for p in lm])), float(np.mean([p.y for p in lm]))),
-                    handedness=label,
-                    facing=hand_facing(wrist, index_mcp, pinky_mcp, raw_label),
+                    center=center,
+                    handedness=side,
+                    facing=hand_facing(wrist, index_mcp, pinky_mcp, side),
                 )
             )
         return hands
