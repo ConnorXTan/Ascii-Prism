@@ -80,7 +80,7 @@ async def config() -> dict:
     """Presets, defaults and ranges, so the page has a single source of truth."""
     return {
         "charsets": [{"id": cs.id, "label": cs.label, "chars": cs.chars} for cs in CHARSETS],
-        "lenses": [{"id": lens.id, "label": lens.label, "blurb": lens.blurb} for lens in LENSES],
+        "lenses": [{"id": lens.id, "label": lens.label, "blurb": lens.blurb, "uses": list(lens.uses)} for lens in LENSES],
         "defaults": asdict(Settings()),
         "ranges": {name: list(bounds) for name, bounds in RANGES.items()},
         "version": __version__,

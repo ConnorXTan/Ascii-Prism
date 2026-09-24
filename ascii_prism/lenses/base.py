@@ -57,6 +57,7 @@ class Lens:
     label = ""
     blurb = ""  # one line for the panel
     needs_history = False  # the pipeline keeps a frame ring buffer only if True
+    uses: tuple[str, ...] = ()  # lens-specific Settings fields, shown in the panel only for this lens
 
     def source(self, ctx: LensContext) -> np.ndarray:
         """Which frame the quad is sampled from. Default: the live one."""

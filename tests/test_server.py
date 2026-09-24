@@ -20,7 +20,7 @@ def test_pages_and_config():
     assert cfg["ranges"]["delay"] == [0.2, 3.0]
     assert cfg["defaults"]["lens"] == "ascii"
     assert [lens["id"] for lens in cfg["lenses"]][:2] == ["ascii", "thermal"]
-    assert all(lens["label"] and lens["blurb"] for lens in cfg["lenses"])
+    assert all(lens["label"] and lens["blurb"] and isinstance(lens["uses"], list) for lens in cfg["lenses"])
 
 
 def test_apply_settings_validates_types_and_ranges():
