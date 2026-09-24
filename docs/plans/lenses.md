@@ -1,6 +1,6 @@
 # Lenses: the window as a portal
 
-Status: looks prototyped and tuned (see Preview findings at the end); pipeline work not started. Written 2026-09-24.
+Status: built on the `lenses` branch (phases 0 to 2, plus night, kaleido and person; gestures and transitions not started). Written 2026-09-24.
 
 ## Why
 

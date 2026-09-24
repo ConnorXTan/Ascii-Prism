@@ -7,6 +7,11 @@ four fingertips become the corners of a window: inside it the video is
 rendered as characters, outside it stays ordinary video. Move, tilt or skew
 your hands and the character grid follows in perspective.
 
+The window is a portal. Pick a **lens** and the same four fingertips frame
+a thermal camera, the room a moment ago, Matrix rain, a Game Boy, a pencil
+sketch, night vision, a kaleidoscope, or only you as characters with the
+room left as video.
+
 It is a website with a Python backend. The page in your browser captures the
 webcam and streams frames to a FastAPI server; Python does all the computer
 vision (MediaPipe hand tracking, OpenCV and NumPy rendering) and streams the
@@ -52,9 +57,9 @@ python -m ascii_prism --no-open              # do not open a browser tab
 python -m ascii_prism --host 0.0.0.0         # reachable from other devices (see below)
 ```
 
-Keys on the page: `L` locks or unlocks the current window so you can lower
-your hands, `H` hides the controls, `F` goes fullscreen, `Esc` closes an
-open panel.
+Keys on the page: `[` and `]` cycle lenses and `1` to `9` pick one, `L`
+locks or unlocks the current window so you can lower your hands, `H` hides
+the controls, `F` goes fullscreen, `Esc` closes an open panel.
 
 Browsers only allow camera access on `localhost` or over HTTPS. To use the
 site from a phone or another computer on your network, put it behind an
@@ -67,6 +72,7 @@ The same pipeline also runs as a native window without a browser:
 ```bash
 python -m ascii_prism desktop                     # webcam
 python -m ascii_prism desktop --source clip.mp4   # a video or image file
+python -m ascii_prism desktop --lens thermal      # start with a lens
 python -m ascii_prism desktop --help              # all options
 ```
 
@@ -85,6 +91,16 @@ plain video.
 
 The video fills the page. The dock at the bottom opens one panel at a time:
 
+- **Lens.** What the window looks into. *ASCII* is the live video as
+  characters. *Thermal* is a heat camera where skin glows and the room goes
+  cold. *Echo* looks a moment into the past; the delay slider sets how far,
+  up to three seconds. *Rain* is falling Matrix code that lights up
+  wherever you are. *Game Boy* is four shades of green at 160 pixels wide.
+  *Sketch* is a pencil drawing on paper. *Night vision* is green goggles
+  with grain. *Kaleido* mirrors the window into itself. *Person* keeps only
+  you as characters and leaves the room as video, or as its negative with
+  *Invert the background*. The panels below apply to the lenses that draw
+  characters.
 - **Characters.** Pick a preset ramp or type your own. Characters are ordered
   from darkest to brightest; each cell picks the character whose position in
   the ramp matches its brightness. Block characters work. *Invert* flips the
@@ -117,25 +133,36 @@ every change.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
   hand tracker, renderer and settings; frames are processed in a thread pool
   so the event loop stays responsive.
-- `ascii_prism/pipeline.py` ties tracking, geometry and rendering together
-  per frame and draws the fingertip overlay. It has no I/O, so it is shared
-  by the website and desktop mode and is easy to test from files.
+- `ascii_prism/pipeline.py` ties tracking, geometry and the active lens
+  together per frame and draws the fingertip overlay. It has no I/O, so it
+  is shared by the website and desktop mode and is easy to test from files.
+  It also keeps the short frame history the echo lens looks into.
+- `ascii_prism/lenses/` is the portal. `base.py` defines what a lens is
+  (pick a source frame, say how big to sample the window, paint the flat
+  image), `looks.py` holds every look as a pure function of that flat
+  image, and each other file wraps one look as a lens. The registry in
+  `__init__.py` is what the settings, the page and the desktop panel read.
+- `ascii_prism/warp.py` samples the window out of a frame as a flat image
+  and pastes a flat image back, through a bilinear map that also handles a
+  twisted window when one hand is flipped.
 - `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
   thumb and index fingertips of up to two hands.
 - `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
   the quad, smooths it over time, and builds the perspective maps with
   OpenCV.
-- `ascii_prism/ascii.py` renders the characters. Pillow rasterises the ramp
-  into a glyph atlas from a monospace font, sized so a block character fills
-  a cell exactly. Each frame, the quad is warped flat and shrunk to one pixel
-  per cell to get average cell colours, luminance picks a glyph per cell,
-  NumPy composes the flat character image, and OpenCV warps it back into the
-  quad over the live frame.
+- `ascii_prism/ascii.py` owns the glyph atlas and grid sizing. Pillow
+  rasterises the ramp from a monospace font, sized so a block character
+  fills a cell exactly. The ASCII lens shrinks the sampled window to one
+  pixel per cell for average colours, luminance picks a glyph per cell, and
+  NumPy composes the flat character image.
 - `ascii_prism/app.py` and `panel.py` are desktop mode: OpenCV window, keys,
   status bar and a Tkinter customizer.
 
 On an Apple Silicon Mac the server spends roughly 10 to 30 ms per 720p frame
-(hand tracking dominates), which gives 30 fps or better in the browser.
+(hand tracking dominates), which gives 30 fps or better in the browser. The
+lenses add a few milliseconds each; the person lens also runs a selfie
+segmenter (a 250 KB model fetched on first use, next to the hand model) on
+the window's surroundings, about 5 ms more.
 
 ## Tests
 
@@ -143,10 +170,10 @@ On an Apple Silicon Mac the server spends roughly 10 to 30 ms per 720p frame
 python -m pytest
 ```
 
-Geometry, rendering and server-validation tests run offline. The pipeline and
-WebSocket tests download a sample photo of two hands and the hand model on
-first run, and are skipped if they cannot be fetched. Cached files land in
-`tests/.cache/`.
+Geometry, rendering, lens and server-validation tests run offline. The
+pipeline, WebSocket and person-lens tests download a sample photo of two
+hands and the models on first run, and are skipped if they cannot be
+fetched. Cached files land in `tests/.cache/` and `~/.cache/ascii-prism/`.
 
 ## Deploying
 
