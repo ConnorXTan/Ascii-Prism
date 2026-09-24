@@ -152,8 +152,27 @@ first run, and are skipped if they cannot be fetched. Cached files land in
 
 ## Deploying
 
-The server needs long-lived WebSocket connections, so it fits hosts that run
-a persistent Python process (Fly.io, Railway, Render, a VPS), not serverless
-platforms such as Vercel functions. Run it with `--host 0.0.0.0` behind
-HTTPS. Note that every visitor's video is processed on the server, so plan
-CPU accordingly; one core handles roughly one viewer at full frame rate.
+Every visitor's video is processed on the server, so plan CPU accordingly;
+one core handles roughly one viewer at full frame rate. Any host that runs a
+persistent Python process works: run `python -m ascii_prism --host 0.0.0.0`
+behind HTTPS.
+
+### Vercel
+
+`Dockerfile.vercel` builds the server as a container image, which Vercel
+runs as a function with WebSocket support. The image installs the OpenGL
+and GLib libraries MediaPipe needs, a monospace font for the renderer, and
+bakes the hand model in so cold starts never download it. With the
+[Vercel CLI](https://vercel.com/docs/cli) installed and logged in:
+
+```bash
+vercel link --yes --project ascii-prism   # once
+vercel deploy                             # preview URL
+vercel deploy --prod                      # production
+```
+
+Two things to expect on Vercel: the function is put to sleep after a few
+idle minutes, so the first visit after a quiet spell waits on a cold start,
+and each WebSocket is closed when the function reaches its time limit (five
+minutes on the Hobby plan). The page reconnects on its own, so that shows up
+as a short pause rather than a dead stream.
