@@ -163,9 +163,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             message = await ws.receive()
             if message.get("type") == "websocket.disconnect":
                 break
-            if message.get("bytes"):
+            if message.get("bytes") is not None:
                 out = await loop.run_in_executor(_executor, session.process, message["bytes"])
                 if out is None:
+                    # The page sends its next frame only after a reply, so a frame
+                    # that cannot be decoded must still be answered or the stream stalls.
+                    await ws.send_json({"type": "dropped"})
                     continue
                 jpeg, status = out
                 await ws.send_bytes(jpeg)

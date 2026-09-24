@@ -541,6 +541,10 @@
         inFlight = false;
         pump();
         break;
+      case 'dropped': // the server could not decode that frame; send the next one
+        inFlight = false;
+        pump();
+        break;
       case 'lock':
         setLocked(msg.locked);
         break;
