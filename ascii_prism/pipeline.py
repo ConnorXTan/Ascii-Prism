@@ -1,4 +1,4 @@
-"""Per-frame processing: hand tracking, region geometry, ASCII rendering and
+"""Per-frame processing: hand tracking, region geometry, the lens render and
 the fingertip overlay. No windows or input handling here, so it is easy to
 test and to drive from a file instead of a camera.
 """
@@ -13,11 +13,14 @@ import numpy as np
 from .ascii import AsciiRenderer, RegionInfo
 from .geometry import is_twisted, smooth_quad
 from .hands import Hand, HandTracker
+from .lenses import DEFAULT_LENS_ID, Lens, LensContext, by_id, render_lens
 from .settings import Settings
 
 HINT_BOTH_HANDS = "Show both hands with thumbs and index fingers out. The four fingertips frame the ASCII window."
 HINT_ONE_HAND = "One hand found. Show the other hand too."
 HINT_SMALL = "Move your hands apart to open a larger window."
+
+MAX_DT = 0.25  # seconds; a stall or a seek is not one long frame
 
 
 @dataclass
@@ -33,10 +36,11 @@ class FrameResult:
     hand_info: list[HandInfo]
     tips: np.ndarray  # (N, 2) fingertip pixels in display space
     quad: np.ndarray | None
-    region: RegionInfo | None
+    region: RegionInfo | None  # the character grid, when the lens draws one
     twisted: bool
     hint: str
     locked: bool
+    lens: str = DEFAULT_LENS_ID
 
 
 def quad_from_hands(hands: list[Hand], width: int, height: int) -> np.ndarray:
@@ -63,6 +67,8 @@ class Pipeline:
         self.locked = False
         self._smoothed: np.ndarray | None = None
         self._last_quad: np.ndarray | None = None
+        self._lens: Lens | None = None
+        self._last_ts: int | None = None
 
     def toggle_lock(self) -> bool:
         if not self.locked and self._last_quad is None:
@@ -72,11 +78,26 @@ class Pipeline:
 
     def reset_tracking(self) -> None:
         self._smoothed = None
+        if self._lens is not None:
+            self._lens.reset()
+
+    @property
+    def lens(self) -> Lens:
+        """The active lens, created on first use and swapped when the setting changes."""
+        wanted = getattr(self.settings, "lens", DEFAULT_LENS_ID)
+        if self._lens is None or self._lens.id != wanted:
+            cls = by_id(wanted) or by_id(DEFAULT_LENS_ID)
+            if self._lens is not None:
+                self._lens.reset()
+            self._lens = cls()
+        return self._lens
 
     def process(self, frame_bgr: np.ndarray, timestamp_ms: int) -> FrameResult:
         s = self.settings
         frame = cv2.flip(frame_bgr, 1) if s.mirror else frame_bgr.copy()
         h, w = frame.shape[:2]
+        dt = 0.0 if self._last_ts is None else min(MAX_DT, max(0.0, (timestamp_ms - self._last_ts) / 1000.0))
+        self._last_ts = timestamp_ms
 
         hands: list[Hand] = []
         if self.tracker is not None:
@@ -103,10 +124,12 @@ class Pipeline:
             else:
                 hint = HINT_BOTH_HANDS
 
+        lens = self.lens
         region = None
         if quad is not None:
-            region = self.renderer.render(frame, quad, s)
-            if region is None:
+            ctx = LensContext(frame, timestamp_ms, dt, self.renderer, self._history_at)
+            drawn, region = render_lens(lens, frame, quad, s, ctx)
+            if not drawn:
                 hint = HINT_SMALL
                 quad = None
         if quad is not None:
@@ -118,7 +141,11 @@ class Pipeline:
             self._draw_overlay(frame, hands, tips, quad)
         info = [HandInfo(hand.handedness, hand.facing) for hand in hands[:2]]
         twisted = bool(quad is not None and is_twisted(quad))
-        return FrameResult(frame, len(hands), info, tips, quad, region, twisted, hint, self.locked)
+        return FrameResult(frame, len(hands), info, tips, quad, region, twisted, hint, self.locked, lens.id)
+
+    def _history_at(self, seconds: float) -> np.ndarray | None:
+        """The frame nearest `seconds` ago. No lens keeps history yet."""
+        return None
 
     def _draw_overlay(self, frame: np.ndarray, hands: list[Hand], tips: np.ndarray, quad: np.ndarray | None) -> None:
         h, w = frame.shape[:2]
