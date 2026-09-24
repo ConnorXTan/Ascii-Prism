@@ -172,18 +172,18 @@
       return this.gridFor(quadNorm.map(([x, y]) => [x * W, y * H]), columns);
     }
 
-    /** Fill the view with the current camera frame, mirrored if asked. */
-    drawVideo(video, mirror) {
+    /** Fill the view with a camera frame (a video element or a canvas), mirrored if asked. */
+    drawVideo(source, mirror) {
       const { view, ctx } = this;
-      const w = video.videoWidth;
-      const h = video.videoHeight;
+      const w = source.videoWidth || source.width;
+      const h = source.videoHeight || source.height;
       if (view.width !== w || view.height !== h) {
         view.width = w;
         view.height = h;
       }
       ctx.globalAlpha = 1;
       ctx.setTransform(mirror ? -1 : 1, 0, 0, 1, mirror ? w : 0, 0);
-      ctx.drawImage(video, 0, 0, w, h);
+      ctx.drawImage(source, 0, 0, w, h);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 

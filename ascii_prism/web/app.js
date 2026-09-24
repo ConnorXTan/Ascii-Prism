@@ -23,6 +23,8 @@
   const TRACK_WIDTH = 480; // frames sent for hand tracking are shrunk to this width
   const TRACK_JPEG_QUALITY = 0.7;
   const MAX_IN_FLIGHT = 2; // tracking frames awaiting a reply
+  const FRAME_RING = 4; // full camera frames kept until their tracking answer arrives
+  const LIVE_FALLBACK_MS = 400; // without a tracked frame this long, draw the camera live
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -83,8 +85,10 @@
   let ws = null;
   let ready = false;
   let inFlight = 0;
+  let pending = []; // camera frames whose tracking answer is still on its way, oldest first
   let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
   let lastGrid = null;
+  let lastTrackedDraw = 0;
   let renderer = null;
   let locked = false;
   let cameraOk = false;
@@ -97,6 +101,8 @@
   let reconnectDelay = 1000;
   let lastFps = 0;
   const capture = document.createElement('canvas');
+  const frameRing = Array.from({ length: FRAME_RING }, () => document.createElement('canvas'));
+  let ringIndex = 0;
   let updatesCounted = 0;
   let fpsWindowStart = performance.now();
 
@@ -653,9 +659,17 @@
   }
 
   // ------------------------------------------------------------- drawing
-  // Every camera frame is drawn here from the local video, with the ASCII
-  // window wherever the server last said it was. The picture never waits on
-  // the network; only the window's position does.
+  // Each tracking answer is drawn onto the very camera frame it was computed
+  // from, so the window sits on the fingers rather than trailing them; the
+  // picture runs one round trip behind the camera. When no answers are
+  // arriving (server starting, offline, or slow) the camera is drawn live.
+  function drawTracked(frame) {
+    renderer.drawVideo(frame, settings.mirror);
+    lastGrid = track.quad ? renderer.drawWindow(track.quad, settings) : null;
+    if (settings.show_tips) renderer.drawOverlay(track.tips, track.quad, locked);
+    lastTrackedDraw = performance.now();
+  }
+
   function startDrawLoop() {
     const v = els.video;
     const next = () => {
@@ -664,9 +678,10 @@
     };
     const step = () => {
       if (cameraOk && v.readyState >= 2 && v.videoWidth) {
-        renderer.drawVideo(v, settings.mirror);
-        lastGrid = track.quad ? renderer.drawWindow(track.quad, settings) : null;
-        if (settings.show_tips) renderer.drawOverlay(track.tips, track.quad, locked);
+        if (performance.now() - lastTrackedDraw > LIVE_FALLBACK_MS) {
+          renderer.drawVideo(v, settings.mirror);
+          lastGrid = null;
+        }
         pump();
       }
       next();
@@ -690,6 +705,7 @@
       const wasReady = ready;
       ready = false;
       inFlight = 0;
+      pending = [];
       track = { quad: null, tips: [], twisted: false, hint: '' };
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
@@ -706,14 +722,18 @@
         showNotice('');
         pump();
         break;
-      case 'track':
+      case 'track': {
+        const frame = pending.shift(); // answers come back in the order frames were sent
         track = { quad: msg.quad || null, tips: msg.tips || [], twisted: Boolean(msg.twisted), hint: msg.hint || '' };
         countUpdate();
         showStatus(msg);
         inFlight = Math.max(0, inFlight - 1);
+        if (frame) drawTracked(frame);
         pump();
         break;
+      }
       case 'dropped': // the server could not decode that frame; send the next one
+        pending.shift();
         inFlight = Math.max(0, inFlight - 1);
         pump();
         break;
@@ -738,22 +758,35 @@
     const v = els.video;
     if (!cameraOk || v.readyState < 2 || !v.videoWidth) return;
     inFlight++;
+    // Keep the full frame so it can be drawn when its answer comes back, and
+    // take the small tracking copy from it so both show the same instant.
+    const frame = frameRing[ringIndex++ % FRAME_RING];
+    if (frame.width !== v.videoWidth || frame.height !== v.videoHeight) {
+      frame.width = v.videoWidth;
+      frame.height = v.videoHeight;
+    }
+    frame.getContext('2d').drawImage(v, 0, 0);
+    pending.push(frame);
+    const forget = () => {
+      inFlight = Math.max(0, inFlight - 1);
+      pending = pending.filter((f) => f !== frame);
+    };
     const w = Math.min(TRACK_WIDTH, v.videoWidth);
     const h = Math.max(1, Math.round((v.videoHeight * w) / v.videoWidth));
     if (capture.width !== w || capture.height !== h) {
       capture.width = w;
       capture.height = h;
     }
-    capture.getContext('2d').drawImage(v, 0, 0, w, h);
+    capture.getContext('2d').drawImage(frame, 0, 0, w, h);
     capture.toBlob(
       (blob) => {
         if (!blob || !ws || ws.readyState !== WebSocket.OPEN) {
-          inFlight = Math.max(0, inFlight - 1);
+          forget();
           return;
         }
         blob.arrayBuffer().then((buffer) => {
           if (ws && ws.readyState === WebSocket.OPEN) ws.send(buffer);
-          else inFlight = Math.max(0, inFlight - 1);
+          else forget();
         });
       },
       'image/jpeg',

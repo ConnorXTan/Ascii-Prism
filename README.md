@@ -100,9 +100,10 @@ The video fills the page. The dock at the bottom opens one panel at a time:
   ring marks the video as-is, the centre is greyscale). *Opacity* blends the
   characters over the live video, *Brightness* is a gain on the sampled
   colours, and *Backdrop* is the colour behind the characters.
-- **Tracking.** *Smoothing* damps fingertip jitter; higher values are
-  steadier but lag more. *Fingertips* draws the four points and the
-  outline. *Mirror* flips the camera like a mirror.
+- **Tracking.** *Smoothing* damps fingertip jitter while your hands rest;
+  quick moves get through with little lag at any setting. *Fingertips*
+  draws the four points and the outline. *Mirror* flips the camera like a
+  mirror.
 
 **Lock** freezes the current window so you can lower your hands, and
 **Fullscreen** does what it says.
@@ -115,11 +116,13 @@ every change.
 - `ascii_prism/web/` is the page: `app.js` captures the webcam and sends
   small JPEG frames (480 pixels wide) over a WebSocket for hand tracking,
   keeping two in flight so the network overlaps the server's work. The
-  server answers with where the window is, and `render.js` draws the video
-  and the ASCII window from the full-size camera feed on the visitor's own
-  machine: it samples the average colour under every cell, grades it, picks
-  a glyph by brightness, composes the character grid on a canvas and warps
-  it into the window with the same bilinear map the Python renderer uses.
+  server answers with where the window is, and `render.js` draws the ASCII
+  window from the full-size camera feed on the visitor's own machine: it
+  samples the average colour under every cell, grades it, picks a glyph by
+  brightness, composes the character grid on a canvas and warps it into the
+  window with the same bilinear map the Python renderer uses. Each answer is
+  drawn onto the camera frame it was computed from, so the window sits on
+  the fingers and the picture runs one round trip behind the camera.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
   hand tracker, geometry state and settings; frames are processed in a
   thread pool so the event loop stays responsive.
@@ -129,9 +132,9 @@ every change.
   mode. It has no I/O, so it is easy to test from files.
 - `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
   thumb and index fingertips of up to two hands.
-- `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
-  the quad, smooths it over time, and builds the perspective maps with
-  OpenCV.
+- `ascii_prism/geometry.py` sizes the quad, detects a twist, smooths it
+  over time with a One Euro filter (steady at rest, quick to follow), and
+  provides the bilinear maps between the unit square and the quad.
 - `ascii_prism/ascii.py` renders the characters. Pillow rasterises the ramp
   into a glyph atlas from a monospace font, sized so a block character fills
   a cell exactly. Each frame, the quad is warped flat and shrunk to one pixel
