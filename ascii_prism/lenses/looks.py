@@ -308,6 +308,30 @@ class Rain:
         self.trail = np.zeros((rows, cols), dtype=np.float32)
         self.glyph = rng.integers(0, len(chars), (rows, cols))
 
+    def resize(self, grid: Grid) -> None:
+        """Keep falling when the window's grid changes shape: columns and
+        rows are kept where they overlap, new ones start fresh."""
+        cols, rows = grid.cols, grid.rows
+        old_cols, old_rows = self.grid.cols, self.grid.rows
+        self.grid = grid
+        if (cols, rows) == (old_cols, old_rows):
+            return
+        rng = self.rng
+        if cols <= old_cols:
+            self.head = self.head[:cols].copy()
+            self.speed = self.speed[:cols].copy()
+        else:
+            extra = cols - old_cols
+            self.head = np.concatenate([self.head, rng.uniform(-rows * 0.7, rows, extra)])
+            self.speed = np.concatenate([self.speed, rng.uniform(rows * 0.4, rows * 1.0, extra)])
+        r, c = min(rows, old_rows), min(cols, old_cols)
+        trail = np.zeros((rows, cols), dtype=np.float32)
+        trail[:r, :c] = self.trail[:r, :c]
+        self.trail = trail
+        glyph = rng.integers(0, len(self.chars), (rows, cols))
+        glyph[:r, :c] = self.glyph[:r, :c]
+        self.glyph = glyph
+
     def step(self, dt: float) -> None:
         cols, rows = self.grid.cols, self.grid.rows
         rng = self.rng

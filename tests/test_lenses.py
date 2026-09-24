@@ -5,6 +5,7 @@ from ascii_prism import lenses
 from ascii_prism.ascii import AsciiRenderer, find_font
 from ascii_prism.hands import Hand
 from ascii_prism.lenses.ascii import AsciiLens
+from ascii_prism.lenses.rain import RainLens
 from ascii_prism.lenses.thermal import ThermalLens
 from ascii_prism.pipeline import Pipeline
 from ascii_prism.settings import Settings
@@ -155,3 +156,23 @@ def test_history_frames_are_stored_small(renderer):
     pipeline = Pipeline(FakeTracker(TWO_HANDS), renderer, settings)
     pipeline.process(np.zeros((720, 1280, 3), np.uint8), 0)
     assert pipeline._history[0][1].shape == (360, 640, 3)
+
+
+def test_rain_lens_animates_and_survives_a_resize(renderer):
+    lens = RainLens()
+    frame = np.full((240, 320, 3), 200, dtype=np.uint8)
+    settings = Settings(columns=40)
+    first = frame.copy()
+    drawn, region = lenses.render_lens(lens, first, QUAD, settings, context(renderer, first))
+    assert drawn and region is not None and region.cols == 40
+    later = lenses.LensContext(frame, 33, 1 / 30, renderer, lambda _s: None)
+    second = frame.copy()
+    lenses.render_lens(lens, second, QUAD, settings, later)
+    assert not np.array_equal(first, second)
+    assert second[60:180, 60:250, 1].max() > second[60:180, 60:250, 2].max()  # green ink
+    taller = QUAD + [[0, 0], [0, 0], [0, 30], [0, 30]]
+    third = frame.copy()
+    drawn, region2 = lenses.render_lens(lens, third, taller, settings, later)
+    assert drawn and region2.rows > region.rows
+    lens.reset()
+    assert lens._rain is None
