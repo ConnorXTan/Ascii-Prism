@@ -116,7 +116,6 @@ button {
 .readout .dot.ok { background: var(--ok); }
 .readout .dot.warn { background: var(--warn); }
 .readout .dot.bad { background: var(--bad); }
-.readout .dim { color: var(--text-3); }
 
 /* Overlays ----------------------------------------------------------------- */
 

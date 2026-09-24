@@ -7,8 +7,8 @@ from ascii_prism.pipeline import HINT_BOTH_HANDS, HINT_ONE_HAND, Pipeline, quad_
 from ascii_prism.settings import Settings
 
 
-def make_hand(index, thumb, center, handedness="Right", facing="palm"):
-    return Hand(thumb=thumb, index=index, wrist=center, center=center, handedness=handedness, facing=facing)
+def make_hand(index, thumb, center):
+    return Hand(thumb=thumb, index=index, center=center)
 
 
 class FakeTracker:
@@ -20,15 +20,15 @@ class FakeTracker:
 
 
 def test_quad_from_hands_follows_fingers():
-    left = make_hand(index=(0.2, 0.2), thumb=(0.2, 0.8), center=(0.25, 0.5), handedness="Left")
+    left = make_hand(index=(0.2, 0.2), thumb=(0.2, 0.8), center=(0.25, 0.5))
     right = make_hand(index=(0.8, 0.2), thumb=(0.8, 0.8), center=(0.75, 0.5))
     quad = quad_from_hands([right, left], 100, 100)  # order of detection must not matter
     np.testing.assert_allclose(quad, [(20, 20), (80, 20), (80, 80), (20, 80)])
 
 
 def test_flipped_hand_makes_a_twisted_window():
-    left = make_hand(index=(0.2, 0.2), thumb=(0.2, 0.8), center=(0.25, 0.5), handedness="Left")
-    flipped_right = make_hand(index=(0.8, 0.8), thumb=(0.8, 0.2), center=(0.75, 0.5), facing="back")
+    left = make_hand(index=(0.2, 0.2), thumb=(0.2, 0.8), center=(0.25, 0.5))
+    flipped_right = make_hand(index=(0.8, 0.8), thumb=(0.8, 0.2), center=(0.75, 0.5))
     frame = np.full((300, 400, 3), 180, dtype=np.uint8)
     pipeline = Pipeline(FakeTracker([left, flipped_right]), AsciiRenderer(find_font()),
                         Settings(mirror=False, show_tips=False, smoothing=0, charset="█ ", background="#ff0000"))
@@ -36,7 +36,6 @@ def test_flipped_hand_makes_a_twisted_window():
     assert result.hands == 2
     assert result.twisted is True
     assert result.region is not None
-    assert [h.facing for h in result.hand_info] == ["palm", "back"]
     # Both lobes of the hourglass are rendered, the pinch point region between them is not.
     assert tuple(result.frame[150, 120]) == (0, 0, 255)
     assert tuple(result.frame[150, 280]) == (0, 0, 255)
@@ -54,7 +53,6 @@ def test_pipeline_tracks_both_hands_and_renders(hands_photo, hand_model):
         assert result.quad is not None and result.region is not None
         assert result.region.cols == 80
         assert result.hint == ""
-        assert len(result.hand_info) == 2
         # The rendered frame differs from the mirrored input inside the quad's box.
         mirrored = cv2.flip(photo, 1)
         q = np.round(result.quad).astype(int)

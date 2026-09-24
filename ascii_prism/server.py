@@ -122,6 +122,8 @@ class Session:
         self.started = time.monotonic()
 
     def process(self, data: bytes) -> tuple[bytes, dict] | None:
+        if not data:
+            return None  # OpenCV raises on an empty buffer; treat it like any undecodable frame
         frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return None
@@ -134,7 +136,6 @@ class Session:
         status = {
             "type": "status",
             "hands": result.hands,
-            "handInfo": [{"hand": h.handedness, "facing": h.facing} for h in result.hand_info],
             "twisted": result.twisted,
             "grid": [result.region.cols, result.region.rows] if result.region else None,
             "hint": result.hint,

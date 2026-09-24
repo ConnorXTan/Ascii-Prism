@@ -43,7 +43,8 @@ def test_websocket_round_trip(hands_photo, hand_model):
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json() == {"type": "ready"}
         ws.send_json({"type": "settings", "settings": {"columns": 40, "saturation": 1.5, "hue": 90, "opacity": 0.7}})
-        ws.send_bytes(b"definitely not a jpeg")  # ignored
+        ws.send_bytes(b"definitely not a jpeg")
+        assert ws.receive_json() == {"type": "dropped"}  # answered, so the page keeps streaming
         ws.send_bytes(jpeg)
         out = ws.receive_bytes()
         status = ws.receive_json()
