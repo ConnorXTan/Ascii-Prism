@@ -1,5 +1,3 @@
-import cv2
-import numpy as np
 from fastapi.testclient import TestClient
 
 from ascii_prism.server import app, apply_settings
@@ -38,25 +36,25 @@ def test_apply_settings_validates_types_and_ranges():
 
 def test_websocket_round_trip(hands_photo, hand_model):
     jpeg = hands_photo.read_bytes()
-    photo = cv2.imread(str(hands_photo))
     client = TestClient(app)
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json() == {"type": "ready"}
-        ws.send_json({"type": "settings", "settings": {"columns": 40, "saturation": 1.5, "hue": 90, "opacity": 0.7}})
+        ws.send_json({"type": "settings", "settings": {"smoothing": 0, "mirror": False}})
         ws.send_bytes(b"definitely not a jpeg")
         assert ws.receive_json() == {"type": "dropped"}  # answered, so the page keeps streaming
         ws.send_bytes(jpeg)
-        out = ws.receive_bytes()
-        status = ws.receive_json()
-        assert status["type"] == "status"
-        assert status["hands"] == 2
-        assert status["grid"][0] == 40
-        assert status["hint"] == ""
-        rendered = cv2.imdecode(np.frombuffer(out, np.uint8), cv2.IMREAD_COLOR)
-        assert rendered.shape == photo.shape
+        track = ws.receive_json()
+        assert track["type"] == "track"
+        assert track["hands"] == 2
+        assert track["hint"] == ""
+        assert track["locked"] is False
+        assert track["ms"] >= 0
+        # Geometry comes back normalized so the page can scale it to its own video.
+        assert len(track["quad"]) == 4 and len(track["tips"]) == 4
+        assert all(0 <= x <= 1 and 0 <= y <= 1 for x, y in track["quad"] + track["tips"])
+        assert isinstance(track["twisted"], bool)
 
         ws.send_json({"type": "lock"})
         assert ws.receive_json() == {"type": "lock", "locked": True}
         ws.send_bytes(jpeg)
-        ws.receive_bytes()
         assert ws.receive_json()["locked"] is True

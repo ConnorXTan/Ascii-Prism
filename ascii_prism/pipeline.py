@@ -1,6 +1,11 @@
 """Per-frame processing: hand tracking, region geometry, ASCII rendering and
 the fingertip overlay. No windows or input handling here, so it is easy to
 test and to drive from a file instead of a camera.
+
+Two entry points share the tracking and geometry: `track()` returns where the
+window is in normalized coordinates, for a client that draws the ASCII
+itself (the website); `process()` also renders the window into the frame
+and draws the overlay (desktop mode).
 """
 
 from __future__ import annotations
@@ -11,13 +16,32 @@ import cv2
 import numpy as np
 
 from .ascii import AsciiRenderer, RegionInfo
-from .geometry import is_twisted, smooth_quad
+from .geometry import is_twisted, quad_size, smooth_quad
 from .hands import Hand, HandTracker
 from .settings import Settings
 
 HINT_BOTH_HANDS = "Hold up both hands, thumbs and index fingers out."
 HINT_ONE_HAND = "One hand found. Show the other one too."
 HINT_SMALL = "Spread your hands apart to open a bigger window."
+HINT_NO_TRACKER = "Hand tracking unavailable."
+
+MIN_WINDOW = 0.03  # of the frame's width and height, below which there is no window
+
+
+@dataclass
+class TrackResult:
+    """Tracking and window geometry for one frame.
+
+    Coordinates are normalized (0..1 of the frame, origin top-left, after
+    mirroring if that is on) so a client can scale them to whatever it draws.
+    """
+
+    hands: int
+    tips: list[tuple[float, float]]  # thumb then index tip, per hand
+    quad: np.ndarray | None  # (4, 2) ordered as in geometry.py
+    twisted: bool
+    hint: str
+    locked: bool
 
 
 @dataclass
@@ -32,7 +56,7 @@ class FrameResult:
     locked: bool
 
 
-def quad_from_hands(hands: list[Hand], width: int, height: int) -> np.ndarray:
+def quad_from_hands(hands: list[Hand], width: float, height: float) -> np.ndarray:
     """Corners follow the fingers: index tips make the top edge, thumb tips
     the bottom edge, and the hand further left on screen gives the left
     corners. Flip one hand and the edges cross into an hourglass."""
@@ -48,14 +72,20 @@ def quad_from_hands(hands: list[Hand], width: int, height: int) -> np.ndarray:
     )
 
 
+def too_small(quad_norm: np.ndarray, width: int, height: int) -> bool:
+    """True when a normalized quad would be less than MIN_WINDOW of the frame."""
+    qw, qh = quad_size(quad_norm * np.array([width, height], dtype=np.float64))
+    return qw < width * MIN_WINDOW or qh < height * MIN_WINDOW
+
+
 class Pipeline:
-    def __init__(self, tracker: HandTracker | None, renderer: AsciiRenderer, settings: Settings):
+    def __init__(self, tracker: HandTracker | None, renderer: AsciiRenderer | None, settings: Settings):
         self.tracker = tracker
         self.renderer = renderer
         self.settings = settings
         self.locked = False
-        self._smoothed: np.ndarray | None = None
-        self._last_quad: np.ndarray | None = None
+        self._smoothed: np.ndarray | None = None  # normalized
+        self._last_quad: np.ndarray | None = None  # normalized
 
     def toggle_lock(self) -> bool:
         if not self.locked and self._last_quad is None:
@@ -66,35 +96,61 @@ class Pipeline:
     def reset_tracking(self) -> None:
         self._smoothed = None
 
-    def process(self, frame_bgr: np.ndarray, timestamp_ms: int) -> FrameResult:
+    def track(self, frame_bgr: np.ndarray, timestamp_ms: int) -> TrackResult:
+        """Find the hands and the window in a camera frame, without rendering."""
+        frame = cv2.flip(frame_bgr, 1) if self.settings.mirror else frame_bgr
+        return self._track_oriented(frame, timestamp_ms)
+
+    def _track_oriented(self, frame: np.ndarray, timestamp_ms: int) -> TrackResult:
         s = self.settings
-        frame = cv2.flip(frame_bgr, 1) if s.mirror else frame_bgr.copy()
         h, w = frame.shape[:2]
 
         hands: list[Hand] = []
         if self.tracker is not None:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             hands = self.tracker.detect(rgb, timestamp_ms)
-        tips = np.array(
-            [[p[0] * w, p[1] * h] for hand in hands[:2] for p in (hand.thumb, hand.index)],
-            dtype=np.float64,
-        ).reshape(-1, 2)
+        tips = [p for hand in hands[:2] for p in (hand.thumb, hand.index)]
 
         quad = None
         hint = ""
         if self.locked and self._last_quad is not None:
             quad = self._last_quad
         elif len(hands) >= 2:
-            self._smoothed = smooth_quad(self._smoothed, quad_from_hands(hands, w, h), s.smoothing)
+            self._smoothed = smooth_quad(self._smoothed, quad_from_hands(hands, 1.0, 1.0), s.smoothing)
             quad = self._smoothed
         else:
             self._smoothed = None
             if self.tracker is None:
-                hint = "Hand tracking unavailable."
+                hint = HINT_NO_TRACKER
             elif len(hands) == 1:
                 hint = HINT_ONE_HAND
             else:
                 hint = HINT_BOTH_HANDS
+
+        if quad is not None and too_small(quad, w, h):
+            hint = HINT_SMALL
+            quad = None
+        if quad is not None:
+            self._last_quad = quad
+        elif not self.locked:
+            self._last_quad = None
+
+        twisted = bool(quad is not None and is_twisted(quad))
+        return TrackResult(len(hands), tips, quad, twisted, hint, self.locked)
+
+    def process(self, frame_bgr: np.ndarray, timestamp_ms: int) -> FrameResult:
+        """Track, render the window into a copy of the frame and draw the overlay."""
+        if self.renderer is None:
+            raise RuntimeError("process() needs a renderer; use track() for geometry only")
+        s = self.settings
+        frame = cv2.flip(frame_bgr, 1) if s.mirror else frame_bgr.copy()
+        h, w = frame.shape[:2]
+        tracked = self._track_oriented(frame, timestamp_ms)
+
+        scale = np.array([w, h], dtype=np.float64)
+        tips = np.array(tracked.tips, dtype=np.float64).reshape(-1, 2) * scale
+        quad = tracked.quad * scale if tracked.quad is not None else None
+        hint = tracked.hint
 
         region = None
         if quad is not None:
@@ -102,15 +158,11 @@ class Pipeline:
             if region is None:
                 hint = HINT_SMALL
                 quad = None
-        if quad is not None:
-            self._last_quad = quad
-        elif not self.locked:
-            self._last_quad = None
 
         if s.show_tips:
             self._draw_overlay(frame, tips, quad)
         twisted = bool(quad is not None and is_twisted(quad))
-        return FrameResult(frame, len(hands), tips, quad, region, twisted, hint, self.locked)
+        return FrameResult(frame, tracked.hands, tips, quad, region, twisted, hint, tracked.locked)
 
     def _draw_overlay(self, frame: np.ndarray, tips: np.ndarray, quad: np.ndarray | None) -> None:
         h, w = frame.shape[:2]

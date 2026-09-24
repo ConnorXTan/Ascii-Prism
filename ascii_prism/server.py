@@ -1,10 +1,11 @@
 """Web front end.
 
-The browser captures the webcam and streams JPEG frames over a WebSocket.
-This server runs hand tracking and the ASCII render on each frame and
-streams the rendered frame back, along with a small status message. All the
-computer vision stays in Python; the page is only capture, display and the
-customizer.
+The browser captures the webcam and streams small JPEG frames over a
+WebSocket. This server runs hand tracking and the window geometry on each
+frame and answers with where the window is, in normalized coordinates. The
+page draws the video and the ASCII window itself from its own full-size
+camera feed, so the computer vision stays in Python while the pixels never
+have to come back over the network.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .ascii import AsciiRenderer, find_font
 from .charsets import CHARSETS
 from .hands import HandTracker
 from .model import ensure_model
@@ -35,7 +35,6 @@ from .settings import RANGES, Settings
 
 WEB_DIR = Path(__file__).parent / "web"
 MAX_CHARSET_LENGTH = 256
-JPEG_QUALITY = 82
 
 app = FastAPI(title="ASCII Prism", version=__version__)
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -51,7 +50,6 @@ async def no_stale_assets(request, call_next):
     return response
 
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="prism")
-_font = find_font()
 _model_path: Path | None = None
 _model_lock = threading.Lock()
 
@@ -112,16 +110,18 @@ def apply_settings(settings: Settings, data: dict) -> None:
 
 
 class Session:
-    """One browser connection: its own tracker, renderer and settings."""
+    """One browser connection: its own tracker, geometry state and settings.
+
+    The page renders the ASCII window itself; the server only says where it is.
+    """
 
     def __init__(self) -> None:
         self.settings = Settings()
-        self.renderer = AsciiRenderer(_font)
         self.tracker = HandTracker(get_model())
-        self.pipeline = Pipeline(self.tracker, self.renderer, self.settings)
+        self.pipeline = Pipeline(self.tracker, None, self.settings)
         self.started = time.monotonic()
 
-    def process(self, data: bytes) -> tuple[bytes, dict] | None:
+    def track(self, data: bytes) -> dict | None:
         if not data:
             return None  # OpenCV raises on an empty buffer; treat it like any undecodable frame
         frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -129,20 +129,19 @@ class Session:
             return None
         timestamp_ms = int((time.monotonic() - self.started) * 1000)
         t0 = time.perf_counter()
-        result = self.pipeline.process(frame, timestamp_ms)
-        ok, jpeg = cv2.imencode(".jpg", result.frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        if not ok:
-            return None
-        status = {
-            "type": "status",
+        result = self.pipeline.track(frame, timestamp_ms)
+        return {
+            "type": "track",
             "hands": result.hands,
+            "tips": [[round(float(x), 4), round(float(y), 4)] for x, y in result.tips],
+            "quad": [[round(float(x), 4), round(float(y), 4)] for x, y in result.quad]
+            if result.quad is not None
+            else None,
             "twisted": result.twisted,
-            "grid": [result.region.cols, result.region.rows] if result.region else None,
             "hint": result.hint,
             "locked": result.locked,
             "ms": round((time.perf_counter() - t0) * 1000, 1),
         }
-        return jpeg.tobytes(), status
 
     def close(self) -> None:
         self.tracker.close()
@@ -165,15 +164,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             if message.get("type") == "websocket.disconnect":
                 break
             if message.get("bytes") is not None:
-                out = await loop.run_in_executor(_executor, session.process, message["bytes"])
+                out = await loop.run_in_executor(_executor, session.track, message["bytes"])
                 if out is None:
-                    # The page sends its next frame only after a reply, so a frame
+                    # The page keeps a fixed number of frames in flight, so a frame
                     # that cannot be decoded must still be answered or the stream stalls.
                     await ws.send_json({"type": "dropped"})
                     continue
-                jpeg, status = out
-                await ws.send_bytes(jpeg)
-                await ws.send_json(status)
+                await ws.send_json(out)
             elif message.get("text"):
                 try:
                     data = json.loads(message["text"])

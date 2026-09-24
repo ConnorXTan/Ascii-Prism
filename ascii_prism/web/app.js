@@ -1,11 +1,13 @@
 /*
  * ASCII Prism browser client.
  *
- * The page captures the webcam, sends one JPEG frame at a time to the Python
- * server over a WebSocket, and draws whatever comes back. Only one frame is
- * in flight, so the stream naturally runs at whatever rate the server can
- * process. Settings live in localStorage and are pushed to the server on
- * connect and whenever they change.
+ * The page captures the webcam and sends small JPEG frames to the Python
+ * server over a WebSocket for hand tracking. The server answers with where
+ * the window is; the page draws the video and the ASCII window itself (see
+ * render.js) from its own full-size camera feed. A couple of tracking frames
+ * are kept in flight so the network overlaps the server's work. Settings
+ * live in localStorage and are pushed to the server on connect and whenever
+ * they change.
  *
  * Layout: the video fills the page, a dock at the bottom opens one panel at
  * a time, and a readout in the top bar shows tracking state.
@@ -18,7 +20,9 @@
   const LOCK_TIP_AFTER_MS = 3000; // window held this long before the Lock tip shows
   const LOCK_TIP_FOR_MS = 7000;
   const GHOST_AFTER_MS = 800; // hands lost this long before the ghost guide returns
-  const JPEG_QUALITY = 0.8;
+  const TRACK_WIDTH = 480; // frames sent for hand tracking are shrunk to this width
+  const TRACK_JPEG_QUALITY = 0.7;
+  const MAX_IN_FLIGHT = 2; // tracking frames awaiting a reply
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -78,7 +82,10 @@
   let settings = null;
   let ws = null;
   let ready = false;
-  let inFlight = false;
+  let inFlight = 0;
+  let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
+  let lastGrid = null;
+  let renderer = null;
   let locked = false;
   let cameraOk = false;
   let onboard = loadOnboard();
@@ -90,8 +97,7 @@
   let reconnectDelay = 1000;
   let lastFps = 0;
   const capture = document.createElement('canvas');
-  const viewCtx = els.view.getContext('2d');
-  let framesShown = 0;
+  let updatesCounted = 0;
   let fpsWindowStart = performance.now();
 
   // ------------------------------------------------------------ settings
@@ -598,12 +604,23 @@
     }
   }
 
+  function countUpdate() {
+    updatesCounted++;
+    const now = performance.now();
+    if (now - fpsWindowStart >= 500) {
+      lastFps = Math.round((updatesCounted * 1000) / (now - fpsWindowStart));
+      updatesCounted = 0;
+      fpsWindowStart = now;
+    }
+  }
+
   function showStatus(msg) {
     els.readoutHands.textContent = `${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`;
-    if (msg.grid) {
-      els.readoutGrid.textContent = `${msg.grid[0]} × ${msg.grid[1]}${msg.twisted ? ' · twisted' : ''}`;
+    const grid = msg.quad ? renderer.gridForNorm(msg.quad, settings.columns) : null;
+    if (grid) {
+      els.readoutGrid.textContent = `${grid.cols} × ${grid.rows}${msg.twisted ? ' · twisted' : ''}`;
       els.readoutGrid.hidden = false;
-      els.rowsNote.textContent = `Right now: ${msg.grid[0]} × ${msg.grid[1]} cells.`;
+      els.rowsNote.textContent = `Right now: ${grid.cols} × ${grid.rows} cells.`;
     } else {
       els.readoutGrid.hidden = true;
       els.rowsNote.textContent = 'Show both hands to see the grid.';
@@ -612,7 +629,7 @@
     els.readoutPerf.hidden = false;
     setHint(msg.hint);
     if (msg.locked !== locked) setLocked(msg.locked);
-    const windowShown = Boolean(msg.grid);
+    const windowShown = Boolean(msg.quad);
     if (windowShown) hideIntro();
     else scheduleGhost();
     noteWindow(windowShown);
@@ -635,28 +652,26 @@
     cameraOk = true;
   }
 
-  /** While the server is not ready, show the local camera so the page is never blank. */
-  function localPreview() {
-    if (ready || !cameraOk) return;
+  // ------------------------------------------------------------- drawing
+  // Every camera frame is drawn here from the local video, with the ASCII
+  // window wherever the server last said it was. The picture never waits on
+  // the network; only the window's position does.
+  function startDrawLoop() {
     const v = els.video;
-    if (v.videoWidth) {
-      sizeView(v.videoWidth, v.videoHeight);
-      viewCtx.save();
-      if (settings.mirror) {
-        viewCtx.translate(els.view.width, 0);
-        viewCtx.scale(-1, 1);
+    const next = () => {
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(step);
+      else requestAnimationFrame(step);
+    };
+    const step = () => {
+      if (cameraOk && v.readyState >= 2 && v.videoWidth) {
+        renderer.drawVideo(v, settings.mirror);
+        lastGrid = track.quad ? renderer.drawWindow(track.quad, settings) : null;
+        if (settings.show_tips) renderer.drawOverlay(track.tips, track.quad, locked);
+        pump();
       }
-      viewCtx.drawImage(v, 0, 0);
-      viewCtx.restore();
-    }
-    requestAnimationFrame(localPreview);
-  }
-
-  function sizeView(w, h) {
-    if (els.view.width !== w || els.view.height !== h) {
-      els.view.width = w;
-      els.view.height = h;
-    }
+      next();
+    };
+    next();
   }
 
   // ----------------------------------------------------------- streaming
@@ -670,16 +685,15 @@
     };
     ws.onmessage = (event) => {
       if (typeof event.data === 'string') handleJson(JSON.parse(event.data));
-      else showFrame(event.data);
     };
     ws.onclose = () => {
       const wasReady = ready;
       ready = false;
-      inFlight = false;
+      inFlight = 0;
+      track = { quad: null, tips: [], twisted: false, hint: '' };
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 8000);
-      requestAnimationFrame(localPreview);
     };
   }
 
@@ -692,13 +706,15 @@
         showNotice('');
         pump();
         break;
-      case 'status':
+      case 'track':
+        track = { quad: msg.quad || null, tips: msg.tips || [], twisted: Boolean(msg.twisted), hint: msg.hint || '' };
+        countUpdate();
         showStatus(msg);
-        inFlight = false;
+        inFlight = Math.max(0, inFlight - 1);
         pump();
         break;
       case 'dropped': // the server could not decode that frame; send the next one
-        inFlight = false;
+        inFlight = Math.max(0, inFlight - 1);
         pump();
         break;
       case 'lock':
@@ -712,51 +728,37 @@
     }
   }
 
-  /** Send the next camera frame if the previous one has been answered. */
+  /**
+   * Send a small copy of the current camera frame for tracking, as long as
+   * fewer than MAX_IN_FLIGHT are unanswered. Called on every camera frame
+   * and on every reply, so the rate settles at whichever is slower.
+   */
   function pump() {
-    if (!ready || inFlight || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ready || inFlight >= MAX_IN_FLIGHT || !ws || ws.readyState !== WebSocket.OPEN) return;
     const v = els.video;
-    if (!cameraOk || v.readyState < 2 || !v.videoWidth) {
-      requestAnimationFrame(pump);
-      return;
+    if (!cameraOk || v.readyState < 2 || !v.videoWidth) return;
+    inFlight++;
+    const w = Math.min(TRACK_WIDTH, v.videoWidth);
+    const h = Math.max(1, Math.round((v.videoHeight * w) / v.videoWidth));
+    if (capture.width !== w || capture.height !== h) {
+      capture.width = w;
+      capture.height = h;
     }
-    inFlight = true;
-    capture.width = v.videoWidth;
-    capture.height = v.videoHeight;
-    capture.getContext('2d').drawImage(v, 0, 0);
+    capture.getContext('2d').drawImage(v, 0, 0, w, h);
     capture.toBlob(
       (blob) => {
         if (!blob || !ws || ws.readyState !== WebSocket.OPEN) {
-          inFlight = false;
+          inFlight = Math.max(0, inFlight - 1);
           return;
         }
         blob.arrayBuffer().then((buffer) => {
           if (ws && ws.readyState === WebSocket.OPEN) ws.send(buffer);
-          else inFlight = false;
+          else inFlight = Math.max(0, inFlight - 1);
         });
       },
       'image/jpeg',
-      JPEG_QUALITY,
+      TRACK_JPEG_QUALITY,
     );
-  }
-
-  async function showFrame(buffer) {
-    let bitmap;
-    try {
-      bitmap = await createImageBitmap(new Blob([buffer], { type: 'image/jpeg' }));
-    } catch {
-      return;
-    }
-    sizeView(bitmap.width, bitmap.height);
-    viewCtx.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    framesShown++;
-    const now = performance.now();
-    if (now - fpsWindowStart >= 500) {
-      lastFps = Math.round((framesShown * 1000) / (now - fpsWindowStart));
-      framesShown = 0;
-      fpsWindowStart = now;
-    }
   }
 
   // ---------------------------------------------------------------- init
@@ -775,6 +777,8 @@
     }
     buildUi();
     syncUi();
+    renderer = new PrismRenderer(els.view);
+    startDrawLoop();
     els.start.addEventListener('click', startCameraFlow);
     connect(); // warm up hand tracking while the visitor reads the intro
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -815,7 +819,6 @@
     showNotice('');
     setConn(ready ? 'ok' : 'warn', ready ? 'Tracking' : 'Starting hand tracking');
     showIntro('waiting', '', '', null, '');
-    requestAnimationFrame(localPreview);
     pump();
   }
 
