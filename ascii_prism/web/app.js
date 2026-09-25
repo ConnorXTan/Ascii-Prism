@@ -23,12 +23,10 @@
   const TRACK_WIDTH = 640; // frames sent for hand tracking are shrunk to this width
   const TRACK_JPEG_QUALITY = 0.7;
   const MAX_IN_FLIGHT = 3; // tracking frames awaiting a reply
-  const MAX_PREDICT_MS = 160; // never carry the window further ahead of its answer than this
-  const PREDICT_EXTRA_MS = 30; // lead beyond the round trip, for display lag
-  const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward its predicted spot
+  const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward the latest answer
   const STALE_MS = 400; // an answer older than this no longer places the window
   const FILTER_BETA = 8; // One Euro: how fast the cutoff rises with speed, in frame widths per second
-  const FILTER_D_CUTOFF = 2; // Hz, smoothing of the speed estimate that prediction runs on
+  const FILTER_D_CUTOFF = 1; // Hz, smoothing of the speed estimate the cutoff follows
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -92,7 +90,7 @@
   let pending = []; // capture times of tracking frames whose answer is still on its way, oldest first
   let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
   let sample = null; // latest answer: { quad: bool, tipCount, t }, t = when its frame was captured
-  let shown = null; // the window as last drawn, eased toward the prediction
+  let shown = null; // the window as last drawn, eased toward the latest answer
   let lastGrid = null;
   let renderer = null;
 
@@ -101,9 +99,8 @@
   /**
    * One Euro filter for one point (Casiez, Roussel and Vogel, 2012): smooths
    * hard while the point rests, where jitter shows, and barely while it
-   * moves, where lag shows. The smoothed speed doubles as the velocity for
-   * carrying the point forward to "now". Coordinates are normalized, times
-   * are milliseconds.
+   * moves, where lag shows. It never guesses ahead of the measurements.
+   * Coordinates are normalized, times are milliseconds.
    */
   class PointFilter {
     constructor() {
@@ -138,9 +135,8 @@
       }
     }
 
-    predict(leadMs) {
-      const s = leadMs / 1000;
-      return [this.x[0] + this.dx[0] * s, this.x[1] + this.dx[1] * s];
+    point() {
+      return [this.x[0], this.x[1]];
     }
   }
 
@@ -725,11 +721,10 @@
   }
 
   // ------------------------------------------------------------- drawing
-  // The camera is always drawn live. Every tracking answer is a little old by
-  // the time it arrives (one round trip). Each corner and fingertip goes
-  // through its own filter, timed by when its frame was captured, and is
-  // carried forward to now at the filter's speed estimate, then eased
-  // slightly so new answers do not make it jump.
+  // The camera is always drawn live. Each corner and fingertip goes through
+  // its own filter, timed by when its frame was captured, and the window is
+  // drawn where the latest answer puts it, eased slightly so answers do not
+  // make it jump. It trails fast moves by one round trip; it never guesses.
   function noteAnswer(msg, t) {
     const tips = track.tips;
     if (!sample || tips.length !== sample.tipCount) tipFilters.forEach((f) => f.reset());
@@ -742,16 +737,15 @@
     sample = { quad: Boolean(msg.quad), tipCount: tips.length, t };
   }
 
-  /** Where the window and the fingertips probably are right now. */
-  function predictWindow(now) {
+  /** The window and the fingertips as the latest answer places them. */
+  function currentWindow(now) {
     if (!sample || now - sample.t > STALE_MS) {
       shown = null;
       return null;
     }
-    const lead = Math.min(MAX_PREDICT_MS, now - sample.t + PREDICT_EXTRA_MS);
     const target = {
-      quad: sample.quad ? quadFilters.map((f) => f.predict(lead)) : null,
-      tips: tipFilters.slice(0, sample.tipCount).map((f) => f.predict(lead)),
+      quad: sample.quad ? quadFilters.map((f) => f.point()) : null,
+      tips: tipFilters.slice(0, sample.tipCount).map((f) => f.point()),
       at: now,
     };
     if (!shown || Boolean(shown.quad) !== Boolean(target.quad) || shown.tips.length !== target.tips.length) {
@@ -773,7 +767,7 @@
     const step = () => {
       if (cameraOk && v.readyState >= 2 && v.videoWidth) {
         renderer.drawVideo(v, settings.mirror);
-        const now = predictWindow(performance.now());
+        const now = currentWindow(performance.now());
         lastGrid = now && now.quad ? renderer.drawWindow(now.quad, settings) : null;
         if (settings.show_tips) renderer.drawOverlay(now ? now.tips : [], now ? now.quad : null, locked);
         pump();
