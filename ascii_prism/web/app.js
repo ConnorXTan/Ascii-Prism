@@ -23,8 +23,10 @@
   const TRACK_WIDTH = 480; // frames sent for hand tracking are shrunk to this width
   const TRACK_JPEG_QUALITY = 0.7;
   const MAX_IN_FLIGHT = 2; // tracking frames awaiting a reply
-  const FRAME_RING = 4; // full camera frames kept until their tracking answer arrives
-  const LIVE_FALLBACK_MS = 400; // without a tracked frame this long, draw the camera live
+  const MAX_PREDICT_MS = 160; // never carry the window further ahead of its answer than this
+  const PREDICT_EXTRA_MS = 30; // lead beyond the round trip, for display and filter lag
+  const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward its predicted spot
+  const STALE_MS = 400; // an answer older than this no longer places the window
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -85,10 +87,13 @@
   let ws = null;
   let ready = false;
   let inFlight = 0;
-  let pending = []; // camera frames whose tracking answer is still on its way, oldest first
+  let pending = []; // capture times of tracking frames whose answer is still on its way, oldest first
   let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
+  let sample = null; // latest answer that had a window: { quad, tips, t }, t = when its frame was captured
+  let velocity = null; // per corner, normalized units per ms, from the last two answers
+  let tipVelocity = null;
+  let shown = null; // the window as last drawn, eased toward the prediction
   let lastGrid = null;
-  let lastTrackedDraw = 0;
   let renderer = null;
   let locked = false;
   let cameraOk = false;
@@ -101,8 +106,6 @@
   let reconnectDelay = 1000;
   let lastFps = 0;
   const capture = document.createElement('canvas');
-  const frameRing = Array.from({ length: FRAME_RING }, () => document.createElement('canvas'));
-  let ringIndex = 0;
   let updatesCounted = 0;
   let fpsWindowStart = performance.now();
 
@@ -659,15 +662,45 @@
   }
 
   // ------------------------------------------------------------- drawing
-  // Each tracking answer is drawn onto the very camera frame it was computed
-  // from, so the window sits on the fingers rather than trailing them; the
-  // picture runs one round trip behind the camera. When no answers are
-  // arriving (server starting, offline, or slow) the camera is drawn live.
-  function drawTracked(frame) {
-    renderer.drawVideo(frame, settings.mirror);
-    lastGrid = track.quad ? renderer.drawWindow(track.quad, settings) : null;
-    if (settings.show_tips) renderer.drawOverlay(track.tips, track.quad, locked);
-    lastTrackedDraw = performance.now();
+  // The camera is always drawn live. Every tracking answer is a little old by
+  // the time it arrives (one round trip), so the window is carried forward
+  // by its age at the velocity seen between the last two answers, then eased
+  // slightly so new answers do not make it jump.
+  function noteAnswer(msg, t) {
+    if (!msg.quad) {
+      sample = velocity = tipVelocity = null;
+      return;
+    }
+    const prev = sample;
+    const dt = prev ? t - prev.t : 0;
+    if (prev && dt > 4 && dt < STALE_MS) {
+      const rate = (pts, old) => pts.map(([x, y], i) => [(x - old[i][0]) / dt, (y - old[i][1]) / dt]);
+      velocity = rate(msg.quad, prev.quad);
+      tipVelocity = prev.tips.length === track.tips.length ? rate(track.tips, prev.tips) : null;
+    } else {
+      velocity = tipVelocity = null;
+    }
+    sample = { quad: msg.quad, tips: track.tips, t };
+  }
+
+  /** Where the window probably is right now. */
+  function predictWindow(now) {
+    if (!sample || now - sample.t > STALE_MS) {
+      shown = null;
+      return null;
+    }
+    const lead = Math.min(MAX_PREDICT_MS, now - sample.t + PREDICT_EXTRA_MS);
+    const ahead = (pts, vel) =>
+      pts.map(([x, y], i) => (vel && vel[i] ? [x + vel[i][0] * lead, y + vel[i][1] * lead] : [x, y]));
+    const target = { quad: ahead(sample.quad, velocity), tips: ahead(sample.tips, tipVelocity), at: now };
+    if (!shown || shown.tips.length !== target.tips.length) {
+      shown = target;
+      return target;
+    }
+    const k = 1 - Math.exp(-(now - shown.at) / SHOW_SMOOTHING_MS);
+    const ease = (from, to) => to.map(([x, y], i) => [from[i][0] + (x - from[i][0]) * k, from[i][1] + (y - from[i][1]) * k]);
+    shown = { quad: ease(shown.quad, target.quad), tips: ease(shown.tips, target.tips), at: now };
+    return shown;
   }
 
   function startDrawLoop() {
@@ -678,10 +711,10 @@
     };
     const step = () => {
       if (cameraOk && v.readyState >= 2 && v.videoWidth) {
-        if (performance.now() - lastTrackedDraw > LIVE_FALLBACK_MS) {
-          renderer.drawVideo(v, settings.mirror);
-          lastGrid = null;
-        }
+        renderer.drawVideo(v, settings.mirror);
+        const now = predictWindow(performance.now());
+        lastGrid = now ? renderer.drawWindow(now.quad, settings) : null;
+        if (settings.show_tips) renderer.drawOverlay(now ? now.tips : track.tips, now ? now.quad : null, locked);
         pump();
       }
       next();
@@ -707,6 +740,7 @@
       inFlight = 0;
       pending = [];
       track = { quad: null, tips: [], twisted: false, hint: '' };
+      sample = velocity = tipVelocity = shown = null;
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 8000);
@@ -723,12 +757,12 @@
         pump();
         break;
       case 'track': {
-        const frame = pending.shift(); // answers come back in the order frames were sent
+        const sent = pending.shift(); // answers come back in the order frames were sent
         track = { quad: msg.quad || null, tips: msg.tips || [], twisted: Boolean(msg.twisted), hint: msg.hint || '' };
+        noteAnswer(msg, sent ? sent.t : performance.now());
         countUpdate();
         showStatus(msg);
         inFlight = Math.max(0, inFlight - 1);
-        if (frame) drawTracked(frame);
         pump();
         break;
       }
@@ -758,18 +792,11 @@
     const v = els.video;
     if (!cameraOk || v.readyState < 2 || !v.videoWidth) return;
     inFlight++;
-    // Keep the full frame so it can be drawn when its answer comes back, and
-    // take the small tracking copy from it so both show the same instant.
-    const frame = frameRing[ringIndex++ % FRAME_RING];
-    if (frame.width !== v.videoWidth || frame.height !== v.videoHeight) {
-      frame.width = v.videoWidth;
-      frame.height = v.videoHeight;
-    }
-    frame.getContext('2d').drawImage(v, 0, 0);
-    pending.push(frame);
+    const sent = { t: performance.now() }; // when this frame was captured, to age its answer later
+    pending.push(sent);
     const forget = () => {
       inFlight = Math.max(0, inFlight - 1);
-      pending = pending.filter((f) => f !== frame);
+      pending = pending.filter((s) => s !== sent);
     };
     const w = Math.min(TRACK_WIDTH, v.videoWidth);
     const h = Math.max(1, Math.round((v.videoHeight * w) / v.videoWidth));
@@ -777,7 +804,7 @@
       capture.width = w;
       capture.height = h;
     }
-    capture.getContext('2d').drawImage(frame, 0, 0, w, h);
+    capture.getContext('2d').drawImage(v, 0, 0, w, h);
     capture.toBlob(
       (blob) => {
         if (!blob || !ws || ws.readyState !== WebSocket.OPEN) {

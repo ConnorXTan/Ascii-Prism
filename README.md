@@ -120,9 +120,10 @@ every change.
   window from the full-size camera feed on the visitor's own machine: it
   samples the average colour under every cell, grades it, picks a glyph by
   brightness, composes the character grid on a canvas and warps it into the
-  window with the same bilinear map the Python renderer uses. Each answer is
-  drawn onto the camera frame it was computed from, so the window sits on
-  the fingers and the picture runs one round trip behind the camera.
+  window with the same bilinear map the Python renderer uses. The camera is
+  drawn live; each answer is a round trip old when it arrives, so the page
+  carries the window forward by that age at the speed seen between the last
+  two answers, which keeps it on the fingers without delaying the picture.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
   hand tracker, geometry state and settings; frames are processed in a
   thread pool so the event loop stays responsive.
