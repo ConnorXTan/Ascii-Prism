@@ -114,16 +114,18 @@ every change.
 ## How it works
 
 - `ascii_prism/web/` is the page: `app.js` captures the webcam and sends
-  small JPEG frames (480 pixels wide) over a WebSocket for hand tracking,
-  keeping two in flight so the network overlaps the server's work. The
+  small JPEG frames (640 pixels wide) over a WebSocket for hand tracking,
+  keeping three in flight so the network overlaps the server's work. The
   server answers with where the window is, and `render.js` draws the ASCII
   window from the full-size camera feed on the visitor's own machine: it
   samples the average colour under every cell, grades it, picks a glyph by
   brightness, composes the character grid on a canvas and warps it into the
   window with the same bilinear map the Python renderer uses. The camera is
-  drawn live; each answer is a round trip old when it arrives, so the page
-  carries the window forward by that age at the speed seen between the last
-  two answers, which keeps it on the fingers without delaying the picture.
+  drawn live. Each answer is a round trip old when it arrives, so the page
+  runs every corner and fingertip through a One Euro filter timed by when
+  its frame was captured and carries it forward to now at the filter's speed
+  estimate, which keeps the window on the fingers without delaying the
+  picture.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
   hand tracker, geometry state and settings; frames are processed in a
   thread pool so the event loop stays responsive.

@@ -20,13 +20,15 @@
   const LOCK_TIP_AFTER_MS = 3000; // window held this long before the Lock tip shows
   const LOCK_TIP_FOR_MS = 7000;
   const GHOST_AFTER_MS = 800; // hands lost this long before the ghost guide returns
-  const TRACK_WIDTH = 480; // frames sent for hand tracking are shrunk to this width
+  const TRACK_WIDTH = 640; // frames sent for hand tracking are shrunk to this width
   const TRACK_JPEG_QUALITY = 0.7;
-  const MAX_IN_FLIGHT = 2; // tracking frames awaiting a reply
+  const MAX_IN_FLIGHT = 3; // tracking frames awaiting a reply
   const MAX_PREDICT_MS = 160; // never carry the window further ahead of its answer than this
-  const PREDICT_EXTRA_MS = 30; // lead beyond the round trip, for display and filter lag
+  const PREDICT_EXTRA_MS = 30; // lead beyond the round trip, for display lag
   const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward its predicted spot
   const STALE_MS = 400; // an answer older than this no longer places the window
+  const FILTER_BETA = 8; // One Euro: how fast the cutoff rises with speed, in frame widths per second
+  const FILTER_D_CUTOFF = 2; // Hz, smoothing of the speed estimate that prediction runs on
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -89,12 +91,68 @@
   let inFlight = 0;
   let pending = []; // capture times of tracking frames whose answer is still on its way, oldest first
   let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
-  let sample = null; // latest answer that had a window: { quad, tips, t }, t = when its frame was captured
-  let velocity = null; // per corner, normalized units per ms, from the last two answers
-  let tipVelocity = null;
+  let sample = null; // latest answer: { quad: bool, tipCount, t }, t = when its frame was captured
   let shown = null; // the window as last drawn, eased toward the prediction
   let lastGrid = null;
   let renderer = null;
+
+  const alpha = (cutoffHz, dtSeconds) => 1 / (1 + 1 / (2 * Math.PI * cutoffHz * dtSeconds));
+
+  /**
+   * One Euro filter for one point (Casiez, Roussel and Vogel, 2012): smooths
+   * hard while the point rests, where jitter shows, and barely while it
+   * moves, where lag shows. The smoothed speed doubles as the velocity for
+   * carrying the point forward to "now". Coordinates are normalized, times
+   * are milliseconds.
+   */
+  class PointFilter {
+    constructor() {
+      this.reset();
+    }
+
+    reset() {
+      this.x = null;
+      this.dx = [0, 0];
+      this.t = 0;
+    }
+
+    update(p, t, smoothing) {
+      if (this.x === null) {
+        this.x = [p[0], p[1]];
+        this.dx = [0, 0];
+        this.t = t;
+        return;
+      }
+      const dt = Math.max(0.001, (t - this.t) / 1000);
+      this.t = t;
+      const ad = alpha(FILTER_D_CUTOFF, dt);
+      const minCutoff = 0.1 + 4 * (1 - smoothing) ** 2;
+      for (let i = 0; i < 2; i++) {
+        this.dx[i] = ad * ((p[i] - this.x[i]) / dt) + (1 - ad) * this.dx[i];
+        if (smoothing <= 0) {
+          this.x[i] = p[i];
+        } else {
+          const a = alpha(minCutoff + FILTER_BETA * Math.abs(this.dx[i]), dt);
+          this.x[i] = a * p[i] + (1 - a) * this.x[i];
+        }
+      }
+    }
+
+    predict(leadMs) {
+      const s = leadMs / 1000;
+      return [this.x[0] + this.dx[0] * s, this.x[1] + this.dx[1] * s];
+    }
+  }
+
+  const quadFilters = Array.from({ length: 4 }, () => new PointFilter());
+  const tipFilters = Array.from({ length: 4 }, () => new PointFilter());
+
+  function resetFilters() {
+    quadFilters.forEach((f) => f.reset());
+    tipFilters.forEach((f) => f.reset());
+    sample = null;
+    shown = null;
+  }
   let locked = false;
   let cameraOk = false;
   let onboard = loadOnboard();
@@ -145,7 +203,8 @@
 
   function sendSettings() {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'settings', settings }));
+      // The page smooths the answers itself, with timing the server cannot see.
+      ws.send(JSON.stringify({ type: 'settings', settings: { ...settings, smoothing: 0 } }));
     }
   }
 
@@ -248,7 +307,11 @@
       changed();
     });
     els.showTips.addEventListener('change', () => { settings.show_tips = els.showTips.checked; changed(); });
-    els.mirror.addEventListener('change', () => { settings.mirror = els.mirror.checked; changed(); });
+    els.mirror.addEventListener('change', () => {
+      settings.mirror = els.mirror.checked;
+      resetFilters();
+      changed();
+    });
 
     for (const button of document.querySelectorAll('[data-reset]')) {
       button.addEventListener('click', () => {
@@ -634,7 +697,7 @@
       els.readoutGrid.hidden = true;
       els.rowsNote.textContent = 'Show both hands to see the grid.';
     }
-    els.readoutPerf.textContent = `${lastFps} fps · ${msg.ms} ms`;
+    els.readoutPerf.textContent = `tracking ${lastFps}/s · ${msg.ms} ms`;
     els.readoutPerf.hidden = false;
     setHint(msg.hint);
     if (msg.locked !== locked) setLocked(msg.locked);
@@ -663,43 +726,41 @@
 
   // ------------------------------------------------------------- drawing
   // The camera is always drawn live. Every tracking answer is a little old by
-  // the time it arrives (one round trip), so the window is carried forward
-  // by its age at the velocity seen between the last two answers, then eased
+  // the time it arrives (one round trip). Each corner and fingertip goes
+  // through its own filter, timed by when its frame was captured, and is
+  // carried forward to now at the filter's speed estimate, then eased
   // slightly so new answers do not make it jump.
   function noteAnswer(msg, t) {
-    if (!msg.quad) {
-      sample = velocity = tipVelocity = null;
-      return;
-    }
-    const prev = sample;
-    const dt = prev ? t - prev.t : 0;
-    if (prev && dt > 4 && dt < STALE_MS) {
-      const rate = (pts, old) => pts.map(([x, y], i) => [(x - old[i][0]) / dt, (y - old[i][1]) / dt]);
-      velocity = rate(msg.quad, prev.quad);
-      tipVelocity = prev.tips.length === track.tips.length ? rate(track.tips, prev.tips) : null;
+    const tips = track.tips;
+    if (!sample || tips.length !== sample.tipCount) tipFilters.forEach((f) => f.reset());
+    tips.forEach((p, i) => tipFilters[i].update(p, t, settings.smoothing));
+    if (msg.quad) {
+      msg.quad.forEach((p, i) => quadFilters[i].update(p, t, settings.smoothing));
     } else {
-      velocity = tipVelocity = null;
+      quadFilters.forEach((f) => f.reset());
     }
-    sample = { quad: msg.quad, tips: track.tips, t };
+    sample = { quad: Boolean(msg.quad), tipCount: tips.length, t };
   }
 
-  /** Where the window probably is right now. */
+  /** Where the window and the fingertips probably are right now. */
   function predictWindow(now) {
     if (!sample || now - sample.t > STALE_MS) {
       shown = null;
       return null;
     }
     const lead = Math.min(MAX_PREDICT_MS, now - sample.t + PREDICT_EXTRA_MS);
-    const ahead = (pts, vel) =>
-      pts.map(([x, y], i) => (vel && vel[i] ? [x + vel[i][0] * lead, y + vel[i][1] * lead] : [x, y]));
-    const target = { quad: ahead(sample.quad, velocity), tips: ahead(sample.tips, tipVelocity), at: now };
-    if (!shown || shown.tips.length !== target.tips.length) {
+    const target = {
+      quad: sample.quad ? quadFilters.map((f) => f.predict(lead)) : null,
+      tips: tipFilters.slice(0, sample.tipCount).map((f) => f.predict(lead)),
+      at: now,
+    };
+    if (!shown || Boolean(shown.quad) !== Boolean(target.quad) || shown.tips.length !== target.tips.length) {
       shown = target;
       return target;
     }
     const k = 1 - Math.exp(-(now - shown.at) / SHOW_SMOOTHING_MS);
     const ease = (from, to) => to.map(([x, y], i) => [from[i][0] + (x - from[i][0]) * k, from[i][1] + (y - from[i][1]) * k]);
-    shown = { quad: ease(shown.quad, target.quad), tips: ease(shown.tips, target.tips), at: now };
+    shown = { quad: target.quad ? ease(shown.quad, target.quad) : null, tips: ease(shown.tips, target.tips), at: now };
     return shown;
   }
 
@@ -713,8 +774,8 @@
       if (cameraOk && v.readyState >= 2 && v.videoWidth) {
         renderer.drawVideo(v, settings.mirror);
         const now = predictWindow(performance.now());
-        lastGrid = now ? renderer.drawWindow(now.quad, settings) : null;
-        if (settings.show_tips) renderer.drawOverlay(now ? now.tips : track.tips, now ? now.quad : null, locked);
+        lastGrid = now && now.quad ? renderer.drawWindow(now.quad, settings) : null;
+        if (settings.show_tips) renderer.drawOverlay(now ? now.tips : [], now ? now.quad : null, locked);
         pump();
       }
       next();
@@ -740,7 +801,7 @@
       inFlight = 0;
       pending = [];
       track = { quad: null, tips: [], twisted: false, hint: '' };
-      sample = velocity = tipVelocity = shown = null;
+      resetFilters();
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 8000);
