@@ -25,8 +25,8 @@
   const MAX_IN_FLIGHT = 3; // tracking frames awaiting a reply
   const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward the latest answer
   const STALE_MS = 400; // an answer older than this no longer places the window
-  const FILTER_BETA = 8; // One Euro: how fast the cutoff rises with speed, in frame widths per second
-  const FILTER_D_CUTOFF = 1; // Hz, smoothing of the speed estimate the cutoff follows
+  const FILTER_BETA = 20; // One Euro: how fast the cutoff rises with speed, in frame widths per second
+  const FILTER_D_CUTOFF = 3; // Hz, smoothing of the speed estimate the cutoff follows
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -123,7 +123,8 @@
       const dt = Math.max(0.001, (t - this.t) / 1000);
       this.t = t;
       const ad = alpha(FILTER_D_CUTOFF, dt);
-      const minCutoff = 0.1 + 4 * (1 - smoothing) ** 2;
+      // Cutoff at rest: 1.5 Hz at the default 0.6, 0.5 Hz at the top of the slider.
+      const minCutoff = 0.5 + 6 * (1 - smoothing) ** 2;
       for (let i = 0; i < 2; i++) {
         this.dx[i] = ad * ((p[i] - this.x[i]) / dt) + (1 - ad) * this.dx[i];
         if (smoothing <= 0) {
