@@ -3,8 +3,9 @@
  *
  * The page captures the webcam and sends small JPEG frames to the Python
  * server over a WebSocket for hand tracking. The server answers with where
- * the window is; the page draws the video and the ASCII window itself (see
- * render.js) from its own full-size camera feed. A couple of tracking frames
+ * the window is; the page draws the video and the window itself through the
+ * active lens (see render.js and lenses.js) from its own full-size camera
+ * feed. A couple of tracking frames
  * are kept in flight so the network overlaps the server's work. Settings
  * live in localStorage and are pushed to the server on connect and whenever
  * they change.
@@ -101,6 +102,8 @@
   let shown = null; // the window as last drawn, eased toward the latest answer
   let lastGrid = null;
   let renderer = null;
+  let mask = null; // the person lens's mask from the latest answer: { box, w, h, data }
+  const lensBox = new window.PrismLenses.LensBox();
 
   const alpha = (cutoffHz, dtSeconds) => 1 / (1 + 1 / (2 * Math.PI * cutoffHz * dtSeconds));
 
@@ -338,6 +341,7 @@
     els.mirror.addEventListener('change', () => {
       settings.mirror = els.mirror.checked;
       resetFilters();
+      lensBox.reset(); // the echo's history is the wrong way round now
       changed();
     });
 
@@ -767,9 +771,9 @@
   }
 
   function showStatus(msg) {
-    els.readoutLens.textContent = lensLabel(msg.lens);
+    els.readoutLens.textContent = lensLabel(settings.lens);
     els.readoutHands.textContent = `${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`;
-    const grid = msg.quad ? renderer.gridForNorm(msg.quad, settings.columns) : null;
+    const grid = msg.quad && lensBox.get(settings.lens).glyphs ? renderer.gridForNorm(msg.quad, settings.columns) : null;
     if (grid) {
       els.readoutGrid.textContent = `${grid.cols} × ${grid.rows}${msg.twisted ? ' · twisted' : ''}`;
       els.readoutGrid.hidden = false;
@@ -777,7 +781,7 @@
     } else {
       els.readoutGrid.hidden = true;
       els.rowsNote.textContent = msg.hands >= 2 && !msg.hint
-        ? `${lensLabel(msg.lens)} draws pixels, not characters.`
+        ? `${lensLabel(settings.lens)} draws pixels, not characters.`
         : 'Show both hands to see the grid.';
     }
     els.readoutPerf.textContent = `tracking ${lastFps}/s · ${msg.ms} ms`;
@@ -854,8 +858,12 @@
     const step = () => {
       if (cameraOk && v.readyState >= 2 && v.videoWidth) {
         renderer.drawVideo(v, settings.mirror);
-        const now = currentWindow(performance.now());
-        lastGrid = now && now.quad ? renderer.drawWindow(now.quad, settings) : null;
+        const t = performance.now();
+        const lens = lensBox.get(settings.lens);
+        if (lens.observe) lens.observe(renderer, t, settings);
+        const now = currentWindow(t);
+        const extra = { now: t, mask: settings.lens === 'person' ? mask : null };
+        lastGrid = now && now.quad ? renderer.drawWindow(now.quad, settings, lens, extra) : null;
         if (settings.show_tips) renderer.drawOverlay(now ? now.tips : [], now ? now.quad : null, locked);
         pump();
       }
@@ -882,6 +890,7 @@
       inFlight = 0;
       pending = [];
       track = { quad: null, tips: [], twisted: false, hint: '' };
+      mask = null;
       resetFilters();
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
@@ -901,6 +910,7 @@
       case 'track': {
         const sent = pending.shift(); // answers come back in the order frames were sent
         track = { quad: msg.quad || null, tips: msg.tips || [], twisted: Boolean(msg.twisted), hint: msg.hint || '' };
+        mask = msg.mask ? decodeMask(msg.mask) : null;
         noteAnswer(msg, sent ? sent.t : performance.now());
         countUpdate();
         showStatus(msg);
@@ -922,6 +932,15 @@
       default:
         break;
     }
+  }
+
+  /** The person mask as the server sends it: a box, a size and base64 bytes. */
+  function decodeMask(m) {
+    const raw = atob(m.data);
+    const data = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
+    const [w, h] = m.size;
+    return data.length === w * h ? { box: m.box, w, h, data } : null;
   }
 
   /**
