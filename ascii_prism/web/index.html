@@ -13,6 +13,37 @@
   <video id="video" autoplay playsinline muted></video>
   <canvas id="view" aria-label="Live camera with ASCII window"></canvas>
 
+  <section class="intro" id="intro" aria-labelledby="intro-title" hidden>
+    <svg class="ghost" viewBox="0 0 280 200" aria-hidden="true">
+      <defs>
+        <clipPath id="ghost-clip"><polygon points="46,42 236,30 248,160 34,170" /></clipPath>
+      </defs>
+      <g class="quad">
+        <g clip-path="url(#ghost-clip)">
+        <text class="glyph" x="30" y="52" textLength="222" lengthAdjust="spacing" xml:space="preserve">          ...::::...          </text>
+        <text class="glyph" x="30" y="67" textLength="222" lengthAdjust="spacing" xml:space="preserve">      .:--===++++===--:.      </text>
+        <text class="glyph" x="30" y="82" textLength="222" lengthAdjust="spacing" xml:space="preserve">    .:-=++**######**++=-:.    </text>
+        <text class="glyph" x="30" y="97" textLength="222" lengthAdjust="spacing" xml:space="preserve">   .:-=+**#%%%@@%%%#**+=-:.   </text>
+        <text class="glyph" x="30" y="112" textLength="222" lengthAdjust="spacing" xml:space="preserve">   .:-=+**#%%%@@%%%#**+=-:.   </text>
+        <text class="glyph" x="30" y="127" textLength="222" lengthAdjust="spacing" xml:space="preserve">    .:-=++**######**++=-:.    </text>
+        <text class="glyph" x="30" y="142" textLength="222" lengthAdjust="spacing" xml:space="preserve">      .:--===++++===--:.      </text>
+        <text class="glyph" x="30" y="157" textLength="222" lengthAdjust="spacing" xml:space="preserve">          ...::::...          </text>
+        </g>
+        <polygon class="outline" points="46,42 236,30 248,160 34,170" />
+        <circle class="tip" cx="46" cy="42" r="7" />
+        <circle class="tip" cx="236" cy="30" r="7" />
+        <circle class="tip" cx="248" cy="160" r="7" />
+        <circle class="tip" cx="34" cy="170" r="7" />
+        <text class="tag" x="46" y="25" text-anchor="middle">index</text>
+        <text class="tag" x="34" y="191" text-anchor="middle">thumb</text>
+      </g>
+    </svg>
+    <h1 class="intro-title" id="intro-title">Hold up both hands</h1>
+    <p class="intro-copy" id="intro-copy">Thumbs and index fingers out. The space between your four fingertips becomes a window of live ASCII.</p>
+    <button class="cta" type="button" id="start">Turn on camera</button>
+    <p class="intro-note" id="intro-note"></p>
+  </section>
+
   <header class="topbar chrome" id="topbar">
     <div class="brand">
       <svg class="mark" viewBox="0 0 20 20" aria-hidden="true">
@@ -162,7 +193,7 @@
       <span class="label">Smoothing <output id="smoothing-value">0.60</output></span>
       <input id="smoothing" type="range" min="0" max="0.95" step="0.05" />
     </label>
-    <p class="note">Higher is steadier but follows your hands with more lag.</p>
+    <p class="note">Higher holds steadier while your hands rest. Quick moves get through either way.</p>
     <label class="switch">
       <input type="checkbox" id="show-tips" />
       <span class="track" aria-hidden="true"></span>
@@ -175,6 +206,7 @@
     </label>
   </section>
 
+  <script src="/static/render.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

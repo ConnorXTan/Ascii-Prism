@@ -31,6 +31,53 @@ def smooth_quad(prev, new, factor: float) -> np.ndarray:
     return np.asarray(prev, dtype=np.float64) * factor + new * (1.0 - factor)
 
 
+def _alpha(cutoff_hz, dt: float):
+    tau = 1.0 / (2.0 * np.pi * cutoff_hz)
+    return 1.0 / (1.0 + tau / dt)
+
+
+class QuadFilter:
+    """One Euro filter over the four corners.
+
+    Plain exponential smoothing trades jitter for lag at every speed. This
+    filter smooths hard while the hands are still, where jitter shows, and
+    lets fast moves straight through, where lag shows (Casiez, Roussel and
+    Vogel, "1 Euro Filter", 2012). `smoothing` is the user's 0..0.95 setting;
+    0 passes points through untouched. Coordinates are normalized, so the
+    speed term is in frame widths per second.
+    """
+
+    BETA = 8.0  # how fast the cutoff rises with speed
+    D_CUTOFF = 1.0  # Hz, smoothing of the speed estimate itself
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self._x: np.ndarray | None = None
+        self._dx: np.ndarray | None = None
+        self._t: float | None = None
+
+    @staticmethod
+    def min_cutoff(smoothing: float) -> float:
+        """Cutoff at rest, in Hz: 0.74 at the default 0.6, 0.11 at the top of the slider."""
+        return 0.1 + 4.0 * (1.0 - smoothing) ** 2
+
+    def __call__(self, quad, t_ms: float, smoothing: float) -> np.ndarray:
+        x = np.asarray(quad, dtype=np.float64)
+        if smoothing <= 0 or self._x is None or self._t is None:
+            self._x, self._dx, self._t = x.copy(), np.zeros_like(x), float(t_ms)
+            return x.copy()
+        dt = max(1e-3, (float(t_ms) - self._t) / 1000.0)
+        self._t = float(t_ms)
+        a_d = _alpha(self.D_CUTOFF, dt)
+        self._dx = a_d * ((x - self._x) / dt) + (1.0 - a_d) * self._dx
+        cutoff = self.min_cutoff(smoothing) + self.BETA * np.abs(self._dx)
+        a = _alpha(cutoff, dt)
+        self._x = a * x + (1.0 - a) * self._x
+        return self._x.copy()
+
+
 def _segments_cross(p1, p2, q1, q2) -> bool:
     def orient(a, b, c):
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])

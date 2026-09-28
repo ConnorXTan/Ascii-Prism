@@ -49,7 +49,9 @@ python -m ascii_prism
 ```
 
 This starts the server at <http://localhost:8000/> and opens it in your
-browser. Allow camera access when asked. Options:
+browser. The page first shows the gesture and asks to turn on the camera;
+allow access when the browser asks. Once the camera has been allowed, later
+visits go straight to the video. Options:
 
 ```bash
 python -m ascii_prism --port 9000            # another port
@@ -114,9 +116,10 @@ The video fills the page. The dock at the bottom opens one panel at a time:
   ring marks the video as-is, the centre is greyscale). *Opacity* blends the
   characters over the live video, *Brightness* is a gain on the sampled
   colours, and *Backdrop* is the colour behind the characters.
-- **Tracking.** *Smoothing* damps fingertip jitter; higher values are
-  steadier but lag more. *Fingertips* draws the four points and the
-  outline. *Mirror* flips the camera like a mirror.
+- **Tracking.** *Smoothing* damps fingertip jitter while your hands rest;
+  quick moves get through with little lag at any setting. *Fingertips*
+  draws the four points and the outline. *Mirror* flips the camera like a
+  mirror.
 
 **Lock** freezes the current window so you can lower your hands, and
 **Fullscreen** does what it says.
@@ -126,17 +129,26 @@ every change.
 
 ## How it works
 
-- `ascii_prism/web/` is the page: `app.js` captures the webcam, sends one
-  JPEG frame at a time over a WebSocket and draws the frame that comes back.
-  Only one frame is in flight, so the stream runs at whatever rate the server
-  can process.
+- `ascii_prism/web/` is the page: `app.js` captures the webcam and sends
+  small JPEG frames (640 pixels wide) over a WebSocket for hand tracking,
+  keeping three in flight so the network overlaps the server's work. The
+  server answers with where the window is, and `render.js` draws the ASCII
+  window from the full-size camera feed on the visitor's own machine: it
+  samples the average colour under every cell, grades it, picks a glyph by
+  brightness, composes the character grid on a canvas and warps it into the
+  window with the same bilinear map the Python renderer uses. The camera is
+  drawn live, and every corner and fingertip goes through a One Euro filter
+  on the page, timed by when its frame was captured. The window is drawn
+  where the latest answer puts it, so it trails a fast move by one round
+  trip but never runs ahead of the fingers.
 - `ascii_prism/server.py` is the FastAPI app. Each connection gets its own
-  hand tracker, renderer and settings; frames are processed in a thread pool
-  so the event loop stays responsive.
+  hand tracker, geometry state and settings; frames are processed in a
+  thread pool so the event loop stays responsive.
 - `ascii_prism/pipeline.py` ties tracking, geometry and the active lens
-  together per frame and draws the fingertip overlay. It has no I/O, so it
-  is shared by the website and desktop mode and is easy to test from files.
-  It also keeps the short frame history the echo lens looks into.
+  together per frame. `track()` returns the window in normalized
+  coordinates for the website; `process()` also renders the lens and draws
+  the fingertip overlay for desktop mode, and keeps the short frame history
+  the echo lens looks into. It has no I/O, so it is easy to test from files.
 - `ascii_prism/lenses/` is the portal. `base.py` defines what a lens is
   (pick a source frame, say how big to sample the window, paint the flat
   image), `looks.py` holds every look as a pure function of that flat
@@ -147,9 +159,9 @@ every change.
   twisted window when one hand is flipped.
 - `ascii_prism/hands.py` wraps MediaPipe's Hand Landmarker and returns the
   thumb and index fingertips of up to two hands.
-- `ascii_prism/geometry.py` orders the four points, checks convexity, sizes
-  the quad, smooths it over time, and builds the perspective maps with
-  OpenCV.
+- `ascii_prism/geometry.py` sizes the quad, detects a twist, smooths it
+  over time with a One Euro filter (steady at rest, quick to follow), and
+  provides the bilinear maps between the unit square and the quad.
 - `ascii_prism/ascii.py` owns the glyph atlas and grid sizing. Pillow
   rasterises the ramp from a monospace font, sized so a block character
   fills a cell exactly. The ASCII lens shrinks the sampled window to one
@@ -158,11 +170,9 @@ every change.
 - `ascii_prism/app.py` and `panel.py` are desktop mode: OpenCV window, keys,
   status bar and a Tkinter customizer.
 
-On an Apple Silicon Mac the server spends roughly 10 to 30 ms per 720p frame
-(hand tracking dominates), which gives 30 fps or better in the browser. The
-lenses add a few milliseconds each; the person lens also runs a selfie
-segmenter (a 250 KB model fetched on first use, next to the hand model) on
-the window's surroundings, about 5 ms more.
+Hand tracking costs the server about 10 ms per frame on an Apple Silicon Mac
+and about 30 ms on a Vercel function. The browser draws at the camera's frame
+rate regardless; only the window's position updates at the tracking rate.
 
 ## Tests
 
@@ -177,8 +187,27 @@ fetched. Cached files land in `tests/.cache/` and `~/.cache/ascii-prism/`.
 
 ## Deploying
 
-The server needs long-lived WebSocket connections, so it fits hosts that run
-a persistent Python process (Fly.io, Railway, Render, a VPS), not serverless
-platforms such as Vercel functions. Run it with `--host 0.0.0.0` behind
-HTTPS. Note that every visitor's video is processed on the server, so plan
-CPU accordingly; one core handles roughly one viewer at full frame rate.
+Every visitor's hand tracking runs on the server, about 30 ms per frame on
+one Vercel vCPU, so plan CPU accordingly; the rendering happens in the
+visitor's browser. Any host that runs a persistent Python process works: run
+`python -m ascii_prism --host 0.0.0.0` behind HTTPS.
+
+### Vercel
+
+`Dockerfile.vercel` builds the server as a container image, which Vercel
+runs as a function with WebSocket support. The image installs the OpenGL
+and GLib libraries MediaPipe needs, a monospace font for the renderer, and
+bakes the hand model in so cold starts never download it. With the
+[Vercel CLI](https://vercel.com/docs/cli) installed and logged in:
+
+```bash
+vercel link --yes --project ascii-prism   # once
+vercel deploy                             # preview URL
+vercel deploy --prod                      # production
+```
+
+Two things to expect on Vercel: the function is put to sleep after a few
+idle minutes, so the first visit after a quiet spell waits on a cold start,
+and each WebSocket is closed when the function reaches its time limit (five
+minutes on the Hobby plan). The page reconnects on its own, so that shows up
+as a short pause rather than a dead stream.

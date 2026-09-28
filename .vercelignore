@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+.claude
+__pycache__
+*.pyc
+.pytest_cache
+.DS_Store
+tests
+docs
+tools
+DESIGN.md
+PRODUCT.md

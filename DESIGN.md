@@ -60,7 +60,14 @@ typography:
     fontSize: "13px"
     fontWeight: 400
     letterSpacing: "0.04em"
+  intro-title:
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 600
+    letterSpacing: "-0.01em"
 rounded:
+  track: "2px"
+  swatch: "5px"
   control: "6px"
   input: "8px"
   tool: "10px"
@@ -135,6 +142,14 @@ components:
     textColor: "{colors.fault-text}"
     rounded: "{rounded.pill}"
     padding: "9px 16px"
+  cta:
+    backgroundColor: "{colors.bright-zinc}"
+    textColor: "{colors.lens-black}"
+    rounded: "{rounded.pill}"
+    padding: "10px 20px"
+  cta-hover:
+    backgroundColor: "{colors.pure-white}"
+    textColor: "{colors.lens-black}"
 ---
 
 # Design System: ASCII Prism
@@ -187,17 +202,18 @@ A near-monochrome palette of black, smoked glass and zinc, with three status col
 
 ## Typography
 
-**Display Font:** none. There is no display scale; the largest type in the interface is 14px.
+**Display Font:** none. There is no display scale; the largest type in the running interface is 14px, and the first-run gate's 17px title is the one exception.
 **Body Font:** the system sans (SF Pro Text on Apple platforms, then Inter, Segoe UI, system-ui).
 **Label/Mono Font:** the system mono (SF Mono, Menlo, Consolas, DejaVu Sans Mono).
 
 **Character:** small, calm and native. The sans disappears into the platform; the mono makes any measured value look like a camera readout. Three weights only: 400 for reading, 500 for tool captions, 600 for the brand and panel titles.
 
 ### Hierarchy
+- **Intro title** (600, 17px, -0.01em; 16px under 560px): the one line on the first-run gate, such as "Hold up both hands" or "Camera is blocked". The only type above 14px, and it appears only while the camera is off.
 - **Title** (600, 13px): panel headings and the brand wordmark. The brand adds 0.01em tracking and a 1px black text shadow so it survives over video.
 - **Body** (400, 14px, 1.45): the base size. Switch labels and the hint and notice pills use it at 13px.
 - **Label** (400, 12px, Zinc Ash): field labels, wheel value names, reset buttons and chips. Notes drop to Zinc Smoke.
-- **Tool** (500, 11px, 0.01em; 10px under 560px): the caption under each dock icon.
+- **Tool** (500, 11px, 0.01em; 10px under 560px, 9px under 360px): the caption under each dock icon.
 - **Readout** (mono, 12px, line-height 1; 11px under 560px): the top bar's status line, Zinc Ash with dim items in Zinc Smoke.
 - **Value** (mono, 12px, Bright Zinc): every live number next to a control, such as `80`, `100%`, `+0°`, `10 levels`.
 - **Input** (mono, 13px, 0.04em): the ramp text field, tracked out so individual characters can be told apart.
@@ -290,8 +306,20 @@ Refined and restrained: hairline borders, translucent fills, and states shown by
 ### Colour Swatch
 - **Style:** a 30px by 22px native colour input with a 6px radius and a Hairline Strong border, followed by the hex in 12px mono Zinc Ash.
 
+### Primary Pill (call to action)
+- **Where:** only on the first-run gate and its blocked state ("Turn on camera", "Try again"). The running interface has no primary button; the dock's tools are all peers.
+- **Style:** pill, Bright Zinc fill with black 13px semibold text, 10px by 20px padding. The brightest thing on the stage, which is the point: it is the one thing to do.
+- **Hover / Active:** fill steps to Pure White over 120ms; active nudges down 1px. Focus uses the system outline at a 3px offset.
+- **Keyboard:** Enter starts the camera while the gate is up, so the button is never auto-focused (that would paint the focus ring for everyone).
+
+### Ghost Window (signature)
+- **What:** an SVG of the fingertip window drawn in the overlay's own vocabulary: a thin white outline joining four white rings with black cores, "index" and "thumb" tags in Zinc Ash beside the left corners, and eight rows of the default ramp inside, set in the mono face at 11px in Zinc Ash, densest in the middle.
+- **Three parts:** on the first-run gate it sits above the title, copy, and primary pill; when the camera cannot start it dims to 35% and stops moving; once the camera is live it stays alone at 55% over the video as a guide, and leaves with a 220ms fade the moment both hands are found.
+- **Motion:** the only authored moment on the page. The quad rocks 1.6 degrees and rises 5px over a 7 second ease-in-out loop, as if held by hands. Off under reduced motion.
+- **Size:** `min(300px, 76vw)`, centred in the stage between the top bar and the dock. It is transient by nature, which is why it may occupy the middle band the Clear Stage Rule otherwise reserves for hands.
+
 ### Hint and Notice Pills
-- **Hint:** pill, Hint Glass fill, Hairline border, 12px blur, 13px Bright Zinc text, centred. Transient guidance such as "Show both hands".
+- **Hint:** pill, Hint Glass fill, Hairline border, 12px blur, 13px Bright Zinc text, centred. Transient guidance from the server such as "Hold up both hands, thumbs and index fingers out", plus one client-side tip after the first window has held for three seconds: "Press L or tap Lock to keep the window while you lower your hands", shown once per browser.
 - **Notice:** the same pill in Fault Glass with a 40% Fault Red border and Fault Text. It is the only error surface and it takes priority over the hint.
 
 ### Readout (signature)
@@ -311,7 +339,8 @@ Drawn by the server into the frame, not by CSS. A thin white outline joins the f
 - **Do** show hover, open and selected by stepping up the glass fills and the zinc ramp; reserve Signal Green, Lock Amber and Fault Red for states that are true right now.
 - **Do** set every measured value, count and code in the mono face at 12px.
 - **Do** keep pills for the transient (hints, notices) and the selectable (chips), and 14px and 10px rounded rectangles for the persistent.
-- **Do** respect safe-area insets at the top and bottom and honour `prefers-reduced-motion` by removing the panel rise and all transitions.
+- **Do** respect safe-area insets at the top and bottom and honour `prefers-reduced-motion` by removing the panel rise, the ghost window's rocking, and all transitions.
+- **Do** keep first-run guidance in the product's own vocabulary: the ghost window, the hint pill, and one sentence. No tour, no modal, no numbered steps.
 
 ### Don't:
 - **Don't** add a sidebar, a drawer, or a column of stacked controls beside the video.

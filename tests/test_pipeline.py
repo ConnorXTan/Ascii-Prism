@@ -3,7 +3,7 @@ import numpy as np
 
 from ascii_prism.ascii import AsciiRenderer, find_font
 from ascii_prism.hands import Hand, HandTracker
-from ascii_prism.pipeline import HINT_BOTH_HANDS, HINT_ONE_HAND, Pipeline, quad_from_hands
+from ascii_prism.pipeline import HINT_BOTH_HANDS, HINT_ONE_HAND, HINT_SMALL, Pipeline, quad_from_hands
 from ascii_prism.settings import Settings
 
 
@@ -70,6 +70,30 @@ def test_pipeline_tracks_both_hands_and_renders(hands_photo, hand_model):
         assert gone.region is None and gone.hint == HINT_BOTH_HANDS
     finally:
         tracker.close()
+
+
+def test_track_returns_normalized_geometry():
+    left = make_hand(index=(0.2, 0.2), thumb=(0.2, 0.8), center=(0.25, 0.5))
+    right = make_hand(index=(0.8, 0.2), thumb=(0.8, 0.8), center=(0.75, 0.5))
+    pipeline = Pipeline(FakeTracker([left, right]), None, Settings(mirror=False, smoothing=0))
+    result = pipeline.track(np.zeros((300, 400, 3), np.uint8), 0)
+    assert result.hands == 2 and result.hint == ""
+    np.testing.assert_allclose(result.quad, [(0.2, 0.2), (0.8, 0.2), (0.8, 0.8), (0.2, 0.8)])
+    assert result.tips == [(0.2, 0.8), (0.2, 0.2), (0.8, 0.8), (0.8, 0.2)]  # thumb then index, per hand
+    assert result.twisted is False and result.locked is False
+    # Locking keeps the same window when the hands go away.
+    assert pipeline.toggle_lock() is True
+    pipeline.tracker = FakeTracker([])
+    held = pipeline.track(np.zeros((300, 400, 3), np.uint8), 40)
+    assert held.hands == 0 and held.locked and np.allclose(held.quad, result.quad)
+
+
+def test_track_rejects_a_tiny_window():
+    left = make_hand(index=(0.50, 0.50), thumb=(0.50, 0.51), center=(0.5, 0.505))
+    right = make_hand(index=(0.51, 0.50), thumb=(0.51, 0.51), center=(0.51, 0.505))
+    pipeline = Pipeline(FakeTracker([left, right]), None, Settings(mirror=False, smoothing=0))
+    result = pipeline.track(np.zeros((300, 400, 3), np.uint8), 0)
+    assert result.quad is None and result.hint == HINT_SMALL
 
 
 def test_one_hand_hint():

@@ -322,6 +322,10 @@
       "input": {
         "displayName": "Input",
         "purpose": "The ramp text field."
+      },
+      "intro-title": {
+        "displayName": "Intro title",
+        "purpose": "The one line on the first-run gate; 16px under 560px."
       }
     },
     "shadows": [
@@ -371,6 +375,11 @@
         "name": "switch",
         "value": "150ms ease",
         "purpose": "Switch track colour and knob slide; also the unhide button's opacity."
+      },
+      {
+        "name": "hold",
+        "value": "7s ease-in-out infinite; rotate -1.6deg to 1.6deg, translateY 0 to -5px",
+        "purpose": "The ghost window rocking as if held by hands. Off under prefers-reduced-motion."
       }
     ],
     "breakpoints": [
@@ -452,6 +461,22 @@
       "description": "Hue around the ring from the top, saturation from grey at the centre outward, a thin ring at 70% radius marking the video as-is. In the app it is drawn on a canvas; this is a CSS approximation.",
       "html": "<div class=\"ds-wheel-row\"><div class=\"ds-wheel\" tabindex=\"0\" role=\"group\" aria-label=\"Hue and saturation\"><span class=\"ds-ring\"></span><span class=\"ds-handle\" style=\"left:50%;top:15%\"></span></div><dl class=\"ds-wheel-values\"><div><dt>Hue</dt><dd>+0°</dd></div><div><dt>Saturation</dt><dd>100%</dd></div></dl></div>",
       "css": ".ds-wheel-row{display:flex;gap:16px;align-items:flex-start;font-family:var(--sans, -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif)} .ds-wheel{position:relative;flex:none;width:160px;height:160px;border-radius:50%;cursor:crosshair;background:radial-gradient(circle,#808080 0%,rgba(128,128,128,0) 70%),conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)} .ds-wheel:focus-visible{outline:2px solid rgba(255,255,255,.7);outline-offset:3px} .ds-ring{position:absolute;inset:15%;border-radius:50%;border:1px solid rgba(255,255,255,.55);pointer-events:none} .ds-handle{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.6) inset;pointer-events:none} .ds-wheel-values{margin:4px 0 0;flex:1;min-width:0} .ds-wheel-values div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--line, rgba(255,255,255,0.1))} .ds-wheel-values dt{font-size:12px;color:var(--text-2, #a1a1aa)} .ds-wheel-values dd{margin:0;font:12px var(--mono, ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace);color:var(--text, #f4f4f5)}"
+    },
+    {
+      "name": "Primary Pill",
+      "kind": "button",
+      "refersTo": "cta",
+      "description": "The first-run gate's one action. Bright Zinc pill with black text; the running interface has no primary button.",
+      "html": "<button class=\"ds-cta\">Turn on camera</button>",
+      "css": ".ds-cta{padding:10px 20px;border:0;border-radius:999px;background:var(--text,#f4f4f5);color:#000;font:600 13px -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif;letter-spacing:.01em;cursor:pointer;transition:background-color 120ms ease,transform 120ms ease} .ds-cta:hover{background:#fff} .ds-cta:active{transform:translateY(1px)} .ds-cta:focus-visible{outline:2px solid rgba(255,255,255,.7);outline-offset:3px}"
+    },
+    {
+      "name": "Ghost Window",
+      "kind": "custom",
+      "refersTo": "ghost",
+      "description": "The fingertip window drawn in the overlay's own vocabulary, used as the first-run guide. Rocks slowly as if held.",
+      "html": "<svg class=\"ds-ghost\" viewBox=\"0 0 280 200\" aria-hidden=\"true\"> <defs> <clipPath id=\"ghost-clip\"><polygon points=\"46,42 236,30 248,160 34,170\" /></clipPath> </defs> <g class=\"quad\"> <g clip-path=\"url(#ghost-clip)\"> <text class=\"glyph\" x=\"30\" y=\"52\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">          ...::::...          </text> <text class=\"glyph\" x=\"30\" y=\"67\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">      .:--===++++===--:.      </text> <text class=\"glyph\" x=\"30\" y=\"82\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">    .:-=++**######**++=-:.    </text> <text class=\"glyph\" x=\"30\" y=\"97\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">   .:-=+**#%%%@@%%%#**+=-:.   </text> <text class=\"glyph\" x=\"30\" y=\"112\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">   .:-=+**#%%%@@%%%#**+=-:.   </text> <text class=\"glyph\" x=\"30\" y=\"127\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">    .:-=++**######**++=-:.    </text> <text class=\"glyph\" x=\"30\" y=\"142\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">      .:--===++++===--:.      </text> <text class=\"glyph\" x=\"30\" y=\"157\" textLength=\"222\" lengthAdjust=\"spacing\" xml:space=\"preserve\">          ...::::...          </text> </g> <polygon class=\"outline\" points=\"46,42 236,30 248,160 34,170\" /> <circle class=\"tip\" cx=\"46\" cy=\"42\" r=\"7\" /> <circle class=\"tip\" cx=\"236\" cy=\"30\" r=\"7\" /> <circle class=\"tip\" cx=\"248\" cy=\"160\" r=\"7\" /> <circle class=\"tip\" cx=\"34\" cy=\"170\" r=\"7\" /> <text class=\"tag\" x=\"46\" y=\"25\" text-anchor=\"middle\">index</text> <text class=\"tag\" x=\"34\" y=\"191\" text-anchor=\"middle\">thumb</text> </g> </svg>",
+      "css": ".ds-ghost{width:min(300px,76vw);height:auto;overflow:visible;display:block} .ds-ghost .quad{transform-box:fill-box;transform-origin:center;animation:ds-hold 7s ease-in-out infinite} @keyframes ds-hold{0%,100%{transform:rotate(-1.6deg) translateY(0)}50%{transform:rotate(1.6deg) translateY(-5px)}} .ds-ghost .outline{fill:none;stroke:#fff;stroke-width:1.5;stroke-linejoin:round} .ds-ghost .tip{fill:#000;stroke:#fff;stroke-width:2} .ds-ghost .glyph{font:11px ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;fill:var(--text-2,#a1a1aa)} .ds-ghost .tag{font:11px -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', system-ui, sans-serif;fill:var(--text-2,#a1a1aa)} @media (prefers-reduced-motion:reduce){.ds-ghost .quad{animation:none}}"
     }
   ],
   "narrative": {
@@ -503,7 +528,8 @@
       "**Do** show hover, open and selected by stepping up the glass fills and the zinc ramp; reserve Signal Green, Lock Amber and Fault Red for states that are true right now.",
       "**Do** set every measured value, count and code in the mono face at 12px.",
       "**Do** keep pills for the transient (hints, notices) and the selectable (chips), and 14px and 10px rounded rectangles for the persistent.",
-      "**Do** respect safe-area insets at the top and bottom and honour `prefers-reduced-motion` by removing the panel rise and all transitions."
+      "**Do** respect safe-area insets at the top and bottom and honour `prefers-reduced-motion` by removing the panel rise, the ghost window's rocking, and all transitions.",
+      "Do keep first-run guidance in the product's own vocabulary: the ghost window, the hint pill, and one sentence. No tour, no modal, no numbered steps."
     ],
     "donts": [
       "**Don't** add a sidebar, a drawer, or a column of stacked controls beside the video.",

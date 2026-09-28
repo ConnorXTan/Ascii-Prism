@@ -1,11 +1,13 @@
 /*
  * ASCII Prism browser client.
  *
- * The page captures the webcam, sends one JPEG frame at a time to the Python
- * server over a WebSocket, and draws whatever comes back. Only one frame is
- * in flight, so the stream naturally runs at whatever rate the server can
- * process. Settings live in localStorage and are pushed to the server on
- * connect and whenever they change.
+ * The page captures the webcam and sends small JPEG frames to the Python
+ * server over a WebSocket for hand tracking. The server answers with where
+ * the window is; the page draws the video and the ASCII window itself (see
+ * render.js) from its own full-size camera feed. A couple of tracking frames
+ * are kept in flight so the network overlaps the server's work. Settings
+ * live in localStorage and are pushed to the server on connect and whenever
+ * they change.
  *
  * Layout: the video fills the page, a dock at the bottom opens one panel at
  * a time, and a readout in the top bar shows tracking state.
@@ -14,7 +16,17 @@
   'use strict';
 
   const STORAGE_KEY = 'ascii-prism.settings.v3';
-  const JPEG_QUALITY = 0.8;
+  const ONBOARD_KEY = 'ascii-prism.onboard.v1'; // { introSeen, lockTipSeen }
+  const LOCK_TIP_AFTER_MS = 3000; // window held this long before the Lock tip shows
+  const LOCK_TIP_FOR_MS = 7000;
+  const GHOST_AFTER_MS = 800; // hands lost this long before the ghost guide returns
+  const TRACK_WIDTH = 640; // frames sent for hand tracking are shrunk to this width
+  const TRACK_JPEG_QUALITY = 0.7;
+  const MAX_IN_FLIGHT = 3; // tracking frames awaiting a reply
+  const SHOW_SMOOTHING_MS = 25; // easing of the drawn window toward the latest answer
+  const STALE_MS = 400; // an answer older than this no longer places the window
+  const FILTER_BETA = 20; // One Euro: how fast the cutoff rises with speed, in frame widths per second
+  const FILTER_D_CUTOFF = 3; // Hz, smoothing of the speed estimate the cutoff follows
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
@@ -31,6 +43,11 @@
     view: $('view'),
     hint: $('hint'),
     notice: $('notice'),
+    intro: $('intro'),
+    introTitle: $('intro-title'),
+    introCopy: $('intro-copy'),
+    introNote: $('intro-note'),
+    start: $('start'),
     connDot: $('conn-dot'),
     connText: $('conn-text'),
     readoutLens: $('readout-lens'),
@@ -77,14 +94,82 @@
   let settings = null;
   let ws = null;
   let ready = false;
-  let inFlight = false;
+  let inFlight = 0;
+  let pending = []; // capture times of tracking frames whose answer is still on its way, oldest first
+  let track = { quad: null, tips: [], twisted: false, hint: '' }; // latest answer from the server
+  let sample = null; // latest answer: { quad: bool, tipCount, t }, t = when its frame was captured
+  let shown = null; // the window as last drawn, eased toward the latest answer
+  let lastGrid = null;
+  let renderer = null;
+
+  const alpha = (cutoffHz, dtSeconds) => 1 / (1 + 1 / (2 * Math.PI * cutoffHz * dtSeconds));
+
+  /**
+   * One Euro filter for one point (Casiez, Roussel and Vogel, 2012): smooths
+   * hard while the point rests, where jitter shows, and barely while it
+   * moves, where lag shows. It never guesses ahead of the measurements.
+   * Coordinates are normalized, times are milliseconds.
+   */
+  class PointFilter {
+    constructor() {
+      this.reset();
+    }
+
+    reset() {
+      this.x = null;
+      this.dx = [0, 0];
+      this.t = 0;
+    }
+
+    update(p, t, smoothing) {
+      if (this.x === null) {
+        this.x = [p[0], p[1]];
+        this.dx = [0, 0];
+        this.t = t;
+        return;
+      }
+      const dt = Math.max(0.001, (t - this.t) / 1000);
+      this.t = t;
+      const ad = alpha(FILTER_D_CUTOFF, dt);
+      // Cutoff at rest: 1.5 Hz at the default 0.6, 0.5 Hz at the top of the slider.
+      const minCutoff = 0.5 + 6 * (1 - smoothing) ** 2;
+      for (let i = 0; i < 2; i++) {
+        this.dx[i] = ad * ((p[i] - this.x[i]) / dt) + (1 - ad) * this.dx[i];
+        if (smoothing <= 0) {
+          this.x[i] = p[i];
+        } else {
+          const a = alpha(minCutoff + FILTER_BETA * Math.abs(this.dx[i]), dt);
+          this.x[i] = a * p[i] + (1 - a) * this.x[i];
+        }
+      }
+    }
+
+    point() {
+      return [this.x[0], this.x[1]];
+    }
+  }
+
+  const quadFilters = Array.from({ length: 4 }, () => new PointFilter());
+  const tipFilters = Array.from({ length: 4 }, () => new PointFilter());
+
+  function resetFilters() {
+    quadFilters.forEach((f) => f.reset());
+    tipFilters.forEach((f) => f.reset());
+    sample = null;
+    shown = null;
+  }
   let locked = false;
   let cameraOk = false;
+  let onboard = loadOnboard();
+  let serverHint = '';
+  let tip = '';
+  let tipTimer = null;
+  let windowSince = 0;
+  let ghostTimer = null;
   let reconnectDelay = 1000;
   let lastFps = 0;
   const capture = document.createElement('canvas');
-  const viewCtx = els.view.getContext('2d');
-  let framesShown = 0;
+  let updatesCounted = 0;
   let fpsWindowStart = performance.now();
 
   // ------------------------------------------------------------ settings
@@ -105,9 +190,26 @@
     }
   }
 
+  function loadOnboard() {
+    try {
+      return JSON.parse(localStorage.getItem(ONBOARD_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveOnboard() {
+    try {
+      localStorage.setItem(ONBOARD_KEY, JSON.stringify(onboard));
+    } catch {
+      /* private mode etc. */
+    }
+  }
+
   function sendSettings() {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'settings', settings }));
+      // The page smooths the answers itself, with timing the server cannot see.
+      ws.send(JSON.stringify({ type: 'settings', settings: { ...settings, smoothing: 0 } }));
     }
   }
 
@@ -233,7 +335,11 @@
     });
     els.personInvert.addEventListener('change', () => { settings.person_invert = els.personInvert.checked; changed(); });
     els.showTips.addEventListener('change', () => { settings.show_tips = els.showTips.checked; changed(); });
-    els.mirror.addEventListener('change', () => { settings.mirror = els.mirror.checked; changed(); });
+    els.mirror.addEventListener('change', () => {
+      settings.mirror = els.mirror.checked;
+      resetFilters();
+      changed();
+    });
 
     for (const button of document.querySelectorAll('[data-reset]')) {
       button.addEventListener('click', () => {
@@ -266,6 +372,11 @@
         return;
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'Enter' && gateOpen()) {
+        startCameraFlow();
+        e.preventDefault();
+        return;
+      }
       const key = e.key.toLowerCase();
       if (key === 'l') toggleLock();
       else if (key === 'h') setChromeHidden(!document.body.classList.contains('chrome-hidden'));
@@ -496,6 +607,12 @@
 
   function setLocked(value) {
     locked = value;
+    if (locked) {
+      if (tip) clearTip();
+      onboard.lockTipSeen = true;
+      saveOnboard();
+      hideIntro();
+    }
     els.lock.setAttribute('aria-pressed', String(locked));
     els.lock.lastElementChild.textContent = locked ? 'Locked' : 'Lock';
   }
@@ -517,27 +634,160 @@
   }
 
   function setHint(text) {
+    serverHint = text;
+    if (text && tip) clearTip(); // the server has something more urgent to say
+    renderHint();
+  }
+
+  function renderHint() {
+    const text = tip || serverHint;
     els.hint.textContent = text;
     els.hint.hidden = !text;
+  }
+
+  function showTip(text, ms) {
+    tip = text;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(clearTip, ms);
+    renderHint();
+  }
+
+  function clearTip() {
+    tip = '';
+    clearTimeout(tipTimer);
+    tipTimer = null;
+    renderHint();
+  }
+
+  // ---------------------------------------------------------- onboarding
+  // The intro element plays three parts: a gate before the camera is on, a
+  // blocked state with a way back, and a faint ghost of the window over the
+  // live video until both hands are found.
+  function showIntro(mode, title, copy, button, note) {
+    els.intro.className = `intro ${mode}`;
+    els.introTitle.textContent = title;
+    els.introCopy.textContent = copy;
+    els.start.hidden = !button;
+    if (button) els.start.textContent = button;
+    els.introNote.textContent = note || '';
+    els.intro.hidden = false;
+  }
+
+  function hideIntro() {
+    clearTimeout(ghostTimer);
+    ghostTimer = null;
+    if (els.intro.hidden || els.intro.classList.contains('out')) return;
+    els.intro.classList.add('out');
+    setTimeout(() => {
+      if (els.intro.classList.contains('out')) {
+        els.intro.hidden = true;
+        els.intro.classList.remove('out');
+      }
+    }, 220);
+  }
+
+  function isLocalHost() {
+    return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  }
+
+  function showGate() {
+    showIntro(
+      '',
+      'Hold up both hands',
+      'Thumbs and index fingers out. The space between your four fingertips becomes a window of live ASCII.',
+      'Turn on camera',
+      isLocalHost() ? 'Video never leaves this computer.' : 'Frames are processed on the server and not stored.',
+    );
+  }
+
+  function gateOpen() {
+    return !els.intro.hidden && !els.start.hidden && !els.start.disabled;
+  }
+
+  function showBlocked(err) {
+    const name = err && err.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      showIntro('blocked', 'Camera is blocked', 'Allow the camera for this site in your browser\'s address bar, then try again.', 'Try again');
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      showIntro('blocked', 'No camera found', 'Connect a camera, then try again.', 'Try again');
+    } else if (name === 'NotReadableError' || name === 'AbortError') {
+      showIntro('blocked', 'Camera is in use', 'Another app may be using the camera. Close it, then try again.', 'Try again');
+    } else if (!navigator.mediaDevices?.getUserMedia) {
+      showIntro('blocked', 'Camera needs a secure page', 'Browsers only allow the camera on localhost or over HTTPS. Open this page at an https:// address.', null);
+    } else {
+      showIntro('blocked', 'Camera unavailable', `${err && err.message ? err.message : 'It could not be started'}. Try again.`, 'Try again');
+    }
+    setConn('bad', 'No camera');
+  }
+
+  /** The camera is live but there is no window yet: keep the ghost as a guide. */
+  function showGhost() {
+    if (!cameraOk || locked) return;
+    if (!els.intro.hidden && els.intro.classList.contains('waiting') && !els.intro.classList.contains('out')) return;
+    showIntro('waiting', '', '', null, '');
+  }
+
+  function scheduleGhost() {
+    if (ghostTimer || !cameraOk || locked) return;
+    ghostTimer = setTimeout(() => {
+      ghostTimer = null;
+      showGhost();
+    }, GHOST_AFTER_MS);
+  }
+
+  /** First success: once the window has held for a moment, say how to keep it. */
+  function noteWindow(shown) {
+    if (!shown) {
+      windowSince = 0;
+      return;
+    }
+    if (onboard.lockTipSeen || locked) return;
+    if (!windowSince) windowSince = performance.now();
+    if (performance.now() - windowSince >= LOCK_TIP_AFTER_MS) {
+      onboard.lockTipSeen = true;
+      saveOnboard();
+      const touch = window.matchMedia('(pointer: coarse)').matches;
+      showTip(
+        touch
+          ? 'Tap Lock to keep the window while you lower your hands.'
+          : 'Press L or tap Lock to keep the window while you lower your hands.',
+        LOCK_TIP_FOR_MS,
+      );
+    }
+  }
+
+  function countUpdate() {
+    updatesCounted++;
+    const now = performance.now();
+    if (now - fpsWindowStart >= 500) {
+      lastFps = Math.round((updatesCounted * 1000) / (now - fpsWindowStart));
+      updatesCounted = 0;
+      fpsWindowStart = now;
+    }
   }
 
   function showStatus(msg) {
     els.readoutLens.textContent = lensLabel(msg.lens);
     els.readoutHands.textContent = `${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`;
-    if (msg.grid) {
-      els.readoutGrid.textContent = `${msg.grid[0]} × ${msg.grid[1]}${msg.twisted ? ' · twisted' : ''}`;
+    const grid = msg.quad ? renderer.gridForNorm(msg.quad, settings.columns) : null;
+    if (grid) {
+      els.readoutGrid.textContent = `${grid.cols} × ${grid.rows}${msg.twisted ? ' · twisted' : ''}`;
       els.readoutGrid.hidden = false;
-      els.rowsNote.textContent = `Right now: ${msg.grid[0]} × ${msg.grid[1]} cells.`;
+      els.rowsNote.textContent = `Right now: ${grid.cols} × ${grid.rows} cells.`;
     } else {
       els.readoutGrid.hidden = true;
       els.rowsNote.textContent = msg.hands >= 2 && !msg.hint
         ? `${lensLabel(msg.lens)} draws pixels, not characters.`
         : 'Show both hands to see the grid.';
     }
-    els.readoutPerf.textContent = `${lastFps} fps · ${msg.ms} ms`;
+    els.readoutPerf.textContent = `tracking ${lastFps}/s · ${msg.ms} ms`;
     els.readoutPerf.hidden = false;
     setHint(msg.hint);
     if (msg.locked !== locked) setLocked(msg.locked);
+    const windowShown = Boolean(msg.quad);
+    if (windowShown) hideIntro();
+    else scheduleGhost();
+    noteWindow(windowShown);
   }
 
   // -------------------------------------------------------------- camera
@@ -557,28 +807,61 @@
     cameraOk = true;
   }
 
-  /** While the server is not ready, show the local camera so the page is never blank. */
-  function localPreview() {
-    if (ready || !cameraOk) return;
-    const v = els.video;
-    if (v.videoWidth) {
-      sizeView(v.videoWidth, v.videoHeight);
-      viewCtx.save();
-      if (settings.mirror) {
-        viewCtx.translate(els.view.width, 0);
-        viewCtx.scale(-1, 1);
-      }
-      viewCtx.drawImage(v, 0, 0);
-      viewCtx.restore();
+  // ------------------------------------------------------------- drawing
+  // The camera is always drawn live. Each corner and fingertip goes through
+  // its own filter, timed by when its frame was captured, and the window is
+  // drawn where the latest answer puts it, eased slightly so answers do not
+  // make it jump. It trails fast moves by one round trip; it never guesses.
+  function noteAnswer(msg, t) {
+    const tips = track.tips;
+    if (!sample || tips.length !== sample.tipCount) tipFilters.forEach((f) => f.reset());
+    tips.forEach((p, i) => tipFilters[i].update(p, t, settings.smoothing));
+    if (msg.quad) {
+      msg.quad.forEach((p, i) => quadFilters[i].update(p, t, settings.smoothing));
+    } else {
+      quadFilters.forEach((f) => f.reset());
     }
-    requestAnimationFrame(localPreview);
+    sample = { quad: Boolean(msg.quad), tipCount: tips.length, t };
   }
 
-  function sizeView(w, h) {
-    if (els.view.width !== w || els.view.height !== h) {
-      els.view.width = w;
-      els.view.height = h;
+  /** The window and the fingertips as the latest answer places them. */
+  function currentWindow(now) {
+    if (!sample || now - sample.t > STALE_MS) {
+      shown = null;
+      return null;
     }
+    const target = {
+      quad: sample.quad ? quadFilters.map((f) => f.point()) : null,
+      tips: tipFilters.slice(0, sample.tipCount).map((f) => f.point()),
+      at: now,
+    };
+    if (!shown || Boolean(shown.quad) !== Boolean(target.quad) || shown.tips.length !== target.tips.length) {
+      shown = target;
+      return target;
+    }
+    const k = 1 - Math.exp(-(now - shown.at) / SHOW_SMOOTHING_MS);
+    const ease = (from, to) => to.map(([x, y], i) => [from[i][0] + (x - from[i][0]) * k, from[i][1] + (y - from[i][1]) * k]);
+    shown = { quad: target.quad ? ease(shown.quad, target.quad) : null, tips: ease(shown.tips, target.tips), at: now };
+    return shown;
+  }
+
+  function startDrawLoop() {
+    const v = els.video;
+    const next = () => {
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(step);
+      else requestAnimationFrame(step);
+    };
+    const step = () => {
+      if (cameraOk && v.readyState >= 2 && v.videoWidth) {
+        renderer.drawVideo(v, settings.mirror);
+        const now = currentWindow(performance.now());
+        lastGrid = now && now.quad ? renderer.drawWindow(now.quad, settings) : null;
+        if (settings.show_tips) renderer.drawOverlay(now ? now.tips : [], now ? now.quad : null, locked);
+        pump();
+      }
+      next();
+    };
+    next();
   }
 
   // ----------------------------------------------------------- streaming
@@ -592,16 +875,17 @@
     };
     ws.onmessage = (event) => {
       if (typeof event.data === 'string') handleJson(JSON.parse(event.data));
-      else showFrame(event.data);
     };
     ws.onclose = () => {
       const wasReady = ready;
       ready = false;
-      inFlight = false;
+      inFlight = 0;
+      pending = [];
+      track = { quad: null, tips: [], twisted: false, hint: '' };
+      resetFilters();
       setConn('bad', wasReady ? 'Reconnecting' : 'Server offline');
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 8000);
-      requestAnimationFrame(localPreview);
     };
   }
 
@@ -610,17 +894,23 @@
       case 'ready':
         ready = true;
         sendSettings();
-        setConn('ok', 'Tracking');
+        setConn('ok', cameraOk ? 'Tracking' : 'Ready');
         showNotice('');
         pump();
         break;
-      case 'status':
+      case 'track': {
+        const sent = pending.shift(); // answers come back in the order frames were sent
+        track = { quad: msg.quad || null, tips: msg.tips || [], twisted: Boolean(msg.twisted), hint: msg.hint || '' };
+        noteAnswer(msg, sent ? sent.t : performance.now());
+        countUpdate();
         showStatus(msg);
-        inFlight = false;
+        inFlight = Math.max(0, inFlight - 1);
         pump();
         break;
+      }
       case 'dropped': // the server could not decode that frame; send the next one
-        inFlight = false;
+        pending.shift();
+        inFlight = Math.max(0, inFlight - 1);
         pump();
         break;
       case 'lock':
@@ -634,51 +924,43 @@
     }
   }
 
-  /** Send the next camera frame if the previous one has been answered. */
+  /**
+   * Send a small copy of the current camera frame for tracking, as long as
+   * fewer than MAX_IN_FLIGHT are unanswered. Called on every camera frame
+   * and on every reply, so the rate settles at whichever is slower.
+   */
   function pump() {
-    if (!ready || inFlight || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!ready || inFlight >= MAX_IN_FLIGHT || !ws || ws.readyState !== WebSocket.OPEN) return;
     const v = els.video;
-    if (!cameraOk || v.readyState < 2 || !v.videoWidth) {
-      requestAnimationFrame(pump);
-      return;
+    if (!cameraOk || v.readyState < 2 || !v.videoWidth) return;
+    inFlight++;
+    const sent = { t: performance.now() }; // when this frame was captured, to age its answer later
+    pending.push(sent);
+    const forget = () => {
+      inFlight = Math.max(0, inFlight - 1);
+      pending = pending.filter((s) => s !== sent);
+    };
+    const w = Math.min(TRACK_WIDTH, v.videoWidth);
+    const h = Math.max(1, Math.round((v.videoHeight * w) / v.videoWidth));
+    if (capture.width !== w || capture.height !== h) {
+      capture.width = w;
+      capture.height = h;
     }
-    inFlight = true;
-    capture.width = v.videoWidth;
-    capture.height = v.videoHeight;
-    capture.getContext('2d').drawImage(v, 0, 0);
+    capture.getContext('2d').drawImage(v, 0, 0, w, h);
     capture.toBlob(
       (blob) => {
         if (!blob || !ws || ws.readyState !== WebSocket.OPEN) {
-          inFlight = false;
+          forget();
           return;
         }
         blob.arrayBuffer().then((buffer) => {
           if (ws && ws.readyState === WebSocket.OPEN) ws.send(buffer);
-          else inFlight = false;
+          else forget();
         });
       },
       'image/jpeg',
-      JPEG_QUALITY,
+      TRACK_JPEG_QUALITY,
     );
-  }
-
-  async function showFrame(buffer) {
-    let bitmap;
-    try {
-      bitmap = await createImageBitmap(new Blob([buffer], { type: 'image/jpeg' }));
-    } catch {
-      return;
-    }
-    sizeView(bitmap.width, bitmap.height);
-    viewCtx.drawImage(bitmap, 0, 0);
-    bitmap.close();
-    framesShown++;
-    const now = performance.now();
-    if (now - fpsWindowStart >= 500) {
-      lastFps = Math.round((framesShown * 1000) / (now - fpsWindowStart));
-      framesShown = 0;
-      fpsWindowStart = now;
-    }
   }
 
   // ---------------------------------------------------------------- init
@@ -698,15 +980,49 @@
     if (!lensById(settings.lens)) settings.lens = config.defaults.lens;
     buildUi();
     syncUi();
+    renderer = new PrismRenderer(els.view);
+    startDrawLoop();
+    els.start.addEventListener('click', startCameraFlow);
+    connect(); // warm up hand tracking while the visitor reads the intro
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showBlocked(null);
+      return;
+    }
+    const permission = await cameraPermission();
+    if (permission === 'denied') {
+      showBlocked({ name: 'NotAllowedError' });
+    } else if (permission === 'granted' || onboard.introSeen) {
+      await startCameraFlow(); // returning visitor: straight to the video
+    } else {
+      showGate();
+    }
+  }
+
+  async function cameraPermission() {
+    try {
+      const status = await navigator.permissions.query({ name: 'camera' });
+      return status.state; // 'granted' | 'denied' | 'prompt'
+    } catch {
+      return 'unknown'; // Safari and Firefox do not expose it
+    }
+  }
+
+  async function startCameraFlow() {
+    els.start.disabled = true;
     try {
       await startCamera();
     } catch (err) {
-      showNotice(`Camera unavailable: ${err.message}. Allow camera access and reload.`);
-      setConn('bad', 'No camera');
+      els.start.disabled = false;
+      showBlocked(err);
       return;
     }
-    requestAnimationFrame(localPreview);
-    connect();
+    els.start.disabled = false;
+    onboard.introSeen = true;
+    saveOnboard();
+    showNotice('');
+    setConn(ready ? 'ok' : 'warn', ready ? 'Tracking' : 'Starting hand tracking');
+    showIntro('waiting', '', '', null, '');
+    pump();
   }
 
   init();
