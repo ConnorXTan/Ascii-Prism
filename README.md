@@ -13,9 +13,11 @@ sketch, night vision, a kaleidoscope, or only you as characters with the
 room left as video.
 
 It is a website with a Python backend. The page in your browser captures the
-webcam and streams frames to a FastAPI server; Python does all the computer
-vision (MediaPipe hand tracking, OpenCV and NumPy rendering) and streams the
-result back. Nothing leaves your machine when you run it locally.
+webcam and streams small frames to a FastAPI server; Python does the computer
+vision (MediaPipe hand tracking, the window's geometry and smoothing, and
+selfie segmentation for the person lens) and answers with where the window
+is. The page draws the lens itself from the full-size camera feed. Nothing
+leaves your machine when you run it locally.
 
 ## Setup
 
@@ -132,11 +134,16 @@ every change.
 - `ascii_prism/web/` is the page: `app.js` captures the webcam and sends
   small JPEG frames (640 pixels wide) over a WebSocket for hand tracking,
   keeping three in flight so the network overlaps the server's work. The
-  server answers with where the window is, and `render.js` draws the ASCII
-  window from the full-size camera feed on the visitor's own machine: it
-  samples the average colour under every cell, grades it, picks a glyph by
-  brightness, composes the character grid on a canvas and warps it into the
-  window with the same bilinear map the Python renderer uses. The camera is
+  server answers with where the window is, and the page draws the active
+  lens from the full-size camera feed on the visitor's own machine.
+  `lenses.js` holds browser ports of every look in `looks.py`: the ASCII
+  lens samples the average colour under every cell, grades it and picks a
+  glyph by brightness; the pixel lenses sample the window as a flat image
+  and paint it. `render.js` has the shared steps (sampling, composing the
+  character grid on a canvas, and warping the flat image into the window
+  with the same bilinear map the Python renderer uses). For the person
+  lens, the server also runs the selfie segmenter around the window and
+  sends a small mask with each answer. The camera is
   drawn live, and every corner and fingertip goes through a One Euro filter
   on the page, timed by when its frame was captured. The window is drawn
   where the latest answer puts it, so it trails a fast move by one round
@@ -171,7 +178,8 @@ every change.
   status bar and a Tkinter customizer.
 
 Hand tracking costs the server about 10 ms per frame on an Apple Silicon Mac
-and about 30 ms on a Vercel function. The browser draws at the camera's frame
+and about 30 ms on a Vercel function; the person lens adds about 5 ms for
+segmentation. Each lens costs the browser 2 to 6 ms per frame. The browser draws at the camera's frame
 rate regardless; only the window's position updates at the tracking rate.
 
 ## Tests
@@ -197,7 +205,7 @@ visitor's browser. Any host that runs a persistent Python process works: run
 `Dockerfile.vercel` builds the server as a container image, which Vercel
 runs as a function with WebSocket support. The image installs the OpenGL
 and GLib libraries MediaPipe needs, a monospace font for the renderer, and
-bakes the hand model in so cold starts never download it. With the
+bakes the hand and segmentation models in so cold starts never download them. With the
 [Vercel CLI](https://vercel.com/docs/cli) installed and logged in:
 
 ```bash
