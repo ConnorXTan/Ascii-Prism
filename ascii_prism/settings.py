@@ -14,6 +14,7 @@ SATURATION_RANGE = (0.0, 2.0)
 HUE_RANGE = (-180.0, 180.0)
 BRIGHTNESS_RANGE = (0.5, 2.0)
 OPACITY_RANGE = (0.0, 1.0)
+DELAY_RANGE = (0.2, 3.0)
 
 RANGES: dict[str, tuple[float, float]] = {
     "columns": COLUMNS_RANGE,
@@ -22,6 +23,7 @@ RANGES: dict[str, tuple[float, float]] = {
     "hue": HUE_RANGE,
     "brightness": BRIGHTNESS_RANGE,
     "opacity": OPACITY_RANGE,
+    "delay": DELAY_RANGE,
 }
 
 
@@ -44,15 +46,26 @@ class Settings:
     smoothing: float = 0.6
     show_tips: bool = True
     mirror: bool = True
+    # What the window looks into (see lenses/). `delay` is how far into the
+    # past the echo lens looks; `person_invert` shows the person lens's
+    # background as a negative.
+    lens: str = "ascii"
+    delay: float = 1.5
+    person_invert: bool = False
 
     def clamp(self) -> "Settings":
         for name, (lo, hi) in RANGES.items():
             setattr(self, name, min(hi, max(lo, getattr(self, name))))
         self.columns = int(self.columns)
-        for name in ("saturation", "hue", "brightness", "opacity", "smoothing"):
+        for name in ("saturation", "hue", "brightness", "opacity", "smoothing", "delay"):
             setattr(self, name, float(getattr(self, name)))
         if not self.charset:
             self.charset = " "
+        # Imported here, not at the top: the lenses import this module.
+        from .lenses import DEFAULT_LENS_ID, by_id as lens_by_id
+
+        if lens_by_id(self.lens) is None:
+            self.lens = DEFAULT_LENS_ID
         return self
 
     def chars(self) -> list[str]:

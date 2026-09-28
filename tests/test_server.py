@@ -17,6 +17,10 @@ def test_pages_and_config():
     assert cfg["defaults"]["columns"] == 80
     assert cfg["ranges"]["columns"] == [16, 200]
     assert cfg["ranges"]["hue"] == [-180, 180]
+    assert cfg["ranges"]["delay"] == [0.2, 3.0]
+    assert cfg["defaults"]["lens"] == "ascii"
+    assert [lens["id"] for lens in cfg["lenses"]][:2] == ["ascii", "thermal"]
+    assert all(lens["label"] and lens["blurb"] and isinstance(lens["uses"], list) for lens in cfg["lenses"])
 
 
 def test_apply_settings_validates_types_and_ranges():
@@ -34,6 +38,10 @@ def test_apply_settings_validates_types_and_ranges():
     assert s.background == "#000000"  # wrong type ignored
     apply_settings(s, {"columns": True})
     assert s.columns == 200  # bools are not ints
+    apply_settings(s, {"lens": "no-such-lens", "delay": 9})
+    assert s.lens == "ascii" and s.delay == 3.0  # unknown lens falls back, delay clamped
+    apply_settings(s, {"lens": "thermal", "delay": 0.05, "person_invert": True})
+    assert s.lens == "thermal" and s.delay == 0.2 and s.person_invert is True
 
 
 def test_websocket_round_trip(hands_photo, hand_model):
@@ -52,8 +60,15 @@ def test_websocket_round_trip(hands_photo, hand_model):
         assert status["hands"] == 2
         assert status["grid"][0] == 40
         assert status["hint"] == ""
+        assert status["lens"] == "ascii"
         rendered = cv2.imdecode(np.frombuffer(out, np.uint8), cv2.IMREAD_COLOR)
         assert rendered.shape == photo.shape
+
+        ws.send_json({"type": "settings", "settings": {"lens": "thermal"}})
+        ws.send_bytes(jpeg)
+        ws.receive_bytes()
+        status = ws.receive_json()
+        assert status["lens"] == "thermal" and status["grid"] is None and status["hands"] == 2
 
         ws.send_json({"type": "lock"})
         assert ws.receive_json() == {"type": "lock", "locked": True}

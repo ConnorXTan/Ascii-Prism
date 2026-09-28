@@ -13,6 +13,7 @@ import numpy as np
 from . import __version__
 from .ascii import AsciiRenderer, find_font
 from .hands import HandTracker
+from .lenses import by_id as lens_by_id, lens_ids
 from .model import ensure_model
 from .pipeline import FrameResult, Pipeline
 from .settings import Settings
@@ -27,6 +28,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--width", type=int, default=1280, help="requested camera width")
     p.add_argument("--height", type=int, default=720, help="requested camera height")
     p.add_argument("--font", type=Path, help="path to a monospace TrueType font")
+    p.add_argument("--lens", choices=lens_ids(), help="start with this lens instead of the saved one")
     p.add_argument("--no-panel", action="store_true", help="do not open the customizer window")
     p.add_argument("--snapshot", type=Path, help="process one frame, write it to this PNG and exit")
     p.add_argument("--max-frames", type=int, default=0, help="exit after this many frames (0 = run until quit)")
@@ -82,9 +84,11 @@ def draw_status(frame: np.ndarray, result: FrameResult, fps: float) -> None:
     bar = frame[h - bar_h : h]
     cv2.addWeighted(bar, 0.35, np.zeros_like(bar), 0.65, 0, bar)
     grid = f"{result.region.cols} x {result.region.rows}" if result.region else "-"
+    lens = lens_by_id(result.lens)
+    lens_name = lens.label if lens else result.lens
     lock = "  LOCKED" if result.locked else ""
     twist = "  twisted" if result.twisted else ""
-    text = f"{fps:4.0f} fps   hands {result.hands}   grid {grid}{twist}{lock}"
+    text = f"{fps:4.0f} fps   {lens_name}   hands {result.hands}   grid {grid}{twist}{lock}"
     cv2.putText(frame, text, (12, h - int(bar_h * 0.35)), cv2.FONT_HERSHEY_SIMPLEX, 0.55 * scale * 1.3,
                 (235, 235, 235), 1, cv2.LINE_AA)
     if result.hint:
@@ -99,6 +103,8 @@ def draw_status(frame: np.ndarray, result: FrameResult, fps: float) -> None:
 def main(argv=None) -> int:
     args = parse_args(argv)
     settings = Settings.load()
+    if args.lens:
+        settings.lens = args.lens
     font = find_font(str(args.font) if args.font else None)
     if font is None:
         print("Warning: no monospace TrueType font found; block characters may not render. Use --font.", file=sys.stderr)
@@ -163,7 +169,7 @@ def main(argv=None) -> int:
                 fps_window = time.perf_counter()
                 if panel is not None:
                     grid = f"{result.region.cols} x {result.region.rows}" if result.region else "-"
-                    panel.set_status(f"{fps:.0f} fps   hands {result.hands}   grid {grid}")
+                    panel.set_status(f"{fps:.0f} fps   {result.lens}   hands {result.hands}   grid {grid}")
 
             draw_status(result.frame, result, fps)
             cv2.imshow(WINDOW, result.frame)
@@ -189,6 +195,16 @@ def main(argv=None) -> int:
                     panel.sync()
             elif key == ord("i"):
                 settings.invert = not settings.invert
+                settings.save()
+                if panel is not None:
+                    panel.sync()
+            elif key in (ord("["), ord("]")) or ord("1") <= key <= ord("9"):
+                ids = lens_ids()
+                if key in (ord("["), ord("]")):
+                    index = ids.index(settings.lens) if settings.lens in ids else 0
+                    settings.lens = ids[(index + (1 if key == ord("]") else -1)) % len(ids)]
+                elif key - ord("1") < len(ids):
+                    settings.lens = ids[key - ord("1")]
                 settings.save()
                 if panel is not None:
                     panel.sync()

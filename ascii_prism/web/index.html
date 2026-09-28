@@ -29,6 +29,7 @@
     </div>
     <div class="readout" aria-live="polite">
       <span class="conn"><i class="dot" id="conn-dot"></i><span id="conn-text">Connecting</span></span>
+      <span class="lens" id="readout-lens"></span>
       <span id="readout-hands">0 hands</span>
       <span id="readout-grid" hidden></span>
       <span id="readout-perf" hidden></span>
@@ -39,6 +40,10 @@
   <div class="hint" id="hint" hidden></div>
 
   <nav class="dock chrome" id="dock" aria-label="Controls">
+    <button class="tool" type="button" data-panel="lens" aria-expanded="false" aria-controls="panel-lens">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" /><circle cx="10" cy="10" r="3" /><path d="M13 7l3.5-3.5" /></svg>
+      <span>Lens</span>
+    </button>
     <button class="tool" type="button" data-panel="characters" aria-expanded="false" aria-controls="panel-characters">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 16v-4M8 16V9M12 16V6M16 16V3" /></svg>
       <span>Characters</span>
@@ -67,6 +72,24 @@
   </nav>
 
   <button class="unhide" type="button" id="unhide" hidden>Show controls</button>
+
+  <section class="panel" id="panel-lens" role="dialog" aria-labelledby="title-lens" hidden>
+    <header>
+      <h2 id="title-lens">Lens</h2>
+      <button class="reset" type="button" data-reset="lens">Reset</button>
+    </header>
+    <div class="lenses" id="lenses" role="radiogroup" aria-label="What the window looks into"></div>
+    <label class="field" id="field-delay" hidden>
+      <span class="label">Delay <output id="delay-value">1.5 s</output></span>
+      <input id="delay" type="range" min="0.2" max="3" step="0.1" />
+    </label>
+    <label class="switch" id="field-person-invert" hidden>
+      <input type="checkbox" id="person-invert" />
+      <span class="track" aria-hidden="true"></span>
+      <span>Invert the background</span>
+    </label>
+    <p class="note"><kbd>[</kbd> and <kbd>]</kbd> cycle lenses, <kbd>1</kbd> to <kbd>9</kbd> pick one.</p>
+  </section>
 
   <section class="panel" id="panel-characters" role="dialog" aria-labelledby="title-characters" hidden>
     <header>

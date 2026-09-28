@@ -1,10 +1,10 @@
-"""ASCII rendering of a warped region.
+"""Glyph atlas and character grid sizing.
 
 The flat character grid is composed with NumPy from a glyph atlas (coverage
-masks rendered with Pillow from a monospace font), then mapped with a
-bilinear warp into the fingertip quadrilateral and pasted over the live
-frame. A bilinear map, unlike a perspective one, also handles a twisted quad
-(edges crossing when one hand is flipped), which renders as a folded ribbon.
+masks rendered with Pillow from a monospace font). `AsciiRenderer` owns the
+font, the atlas cache and the grid sizing that every character lens shares;
+the warp into the fingertip quad lives in `warp.py` and the looks in
+`lenses/`.
 """
 
 from __future__ import annotations
@@ -13,16 +13,13 @@ import os
 import sys
 from dataclasses import dataclass
 
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .geometry import bilinear_map, inverse_bilinear, quad_size
-from .grading import blend, grade
-from .settings import Settings, hex_to_bgr
+from .geometry import quad_size
+from .settings import Settings
 
 MAX_ROWS = 400
-SUPERSAMPLE = 3  # video samples per cell edge when averaging cell colours
 PROBE_SIZE = 100
 
 FONT_CANDIDATES = {
@@ -135,59 +132,14 @@ class AsciiRenderer:
         return atlas
 
     def render(self, frame: np.ndarray, quad, settings: Settings) -> RegionInfo | None:
-        """Replace the quad's interior in `frame` (BGR, modified in place) with ASCII."""
-        frame_h, frame_w = frame.shape[:2]
-        grid = self.grid_for(quad, settings.columns, frame_w, frame_h)
-        if grid is None:
-            return None
-        cols, rows = grid
-        _, height = quad_size(quad)
-        glyph_h = int(min(self.max_glyph_h, max(self.min_glyph_h, round(height / rows))))
-        chars = settings.chars()
-        atlas = self.atlas(chars, glyph_h)
-        glyph_w = atlas.glyph_w
+        """Replace the quad's interior in `frame` (BGR, modified in place) with ASCII.
 
-        # Average video colour per cell: sample the quad onto a small flat image.
-        sw, sh = cols * SUPERSAMPLE, rows * SUPERSAMPLE
-        us = (np.arange(sw, dtype=np.float64) + 0.5) / sw
-        vs = (np.arange(sh, dtype=np.float64) + 0.5) / sh
-        sx, sy = bilinear_map(quad, us[None, :], vs[:, None])
-        small = cv2.remap(frame, sx.astype(np.float32), sy.astype(np.float32), cv2.INTER_LINEAR)
-        cells = cv2.resize(small, (cols, rows), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
+        A shortcut for callers that only want the default lens; the pipeline
+        goes through `lenses` so any lens can be active.
+        """
+        from .lenses import LensContext, render_lens
+        from .lenses.ascii import AsciiLens
 
-        lum = cells[..., 0] * 0.0722 + cells[..., 1] * 0.7152 + cells[..., 2] * 0.2126
-        if settings.invert:
-            lum = 1.0 - lum
-        n = len(chars)
-        idx = np.clip((lum * n).astype(np.int32), 0, n - 1)
-
-        ink = grade(cells, settings)
-        background = np.array(hex_to_bgr(settings.background), dtype=np.float32) / 255.0
-
-        # Compose the flat character image.
-        cov = atlas.coverage[idx]  # (rows, cols, gh, gw)
-        cov = cov.transpose(0, 2, 1, 3).reshape(rows * glyph_h, cols * glyph_w, 1)
-        ink_big = np.repeat(np.repeat(ink, glyph_h, axis=0), glyph_w, axis=1)
-        flat = background + (ink_big - background) * cov
-        flat = (flat * 255.0 + 0.5).astype(np.uint8)
-
-        # Warp it into the quad and paste over the frame. Only the quad's
-        # bounding box is touched; pixels outside the (possibly twisted)
-        # surface are left alone.
-        fh, fw = flat.shape[:2]
-        q = np.asarray(quad, dtype=np.float64)
-        x0 = int(max(0, np.floor(q[:, 0].min())))
-        y0 = int(max(0, np.floor(q[:, 1].min())))
-        x1 = int(min(frame_w, np.ceil(q[:, 0].max()) + 1))
-        y1 = int(min(frame_h, np.ceil(q[:, 1].max()) + 1))
-        if x1 <= x0 or y1 <= y0:
-            return None
-        px = np.arange(x0, x1, dtype=np.float64) + 0.5
-        py = np.arange(y0, y1, dtype=np.float64) + 0.5
-        u, v, valid = inverse_bilinear(quad, px[None, :], py[:, None])
-        map_x = (np.nan_to_num(u) * fw - 0.5).astype(np.float32)
-        map_y = (np.nan_to_num(v) * fh - 0.5).astype(np.float32)
-        warped = cv2.remap(flat, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-        region = frame[y0:y1, x0:x1]
-        np.copyto(region, blend(region, warped, settings.opacity), where=valid[:, :, None])
-        return RegionInfo(cols, rows, glyph_w, glyph_h)
+        ctx = LensContext(frame, 0, 0.0, self, lambda _seconds: None)
+        drawn, region = render_lens(AsciiLens(), frame, quad, settings, ctx)
+        return region if drawn else None

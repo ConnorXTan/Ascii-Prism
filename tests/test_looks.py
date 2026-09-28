@@ -155,3 +155,26 @@ def test_segmenter_finds_the_person(hands_photo, segmenter_model):
     quad = np.array([[150, 370], [590, 400], [575, 700], [140, 670]], dtype=np.float64)
     mask_flat = sample_quad(mask, quad, 90, 60)
     assert mask_flat.shape == (60, 90) and mask_flat.max() > 0.9
+    boxed = looks.PersonMask(segmenter_model)(photo, roi=(100, 300, 600, 800))
+    assert boxed.shape == photo.shape[:2]
+    assert boxed[:80, :80].max() == 0 and boxed[850:, :].max() == 0  # outside the box is untouched
+    assert boxed[480:560, 260:340].mean() > 0.9
+
+
+def test_rain_resize_keeps_the_overlap(renderer, grid):
+    chars = looks.RAIN_LATIN
+    atlas = looks.FixedCellAtlas(renderer.font_path, list(chars), grid.glyph_h, grid.glyph_w)
+    rain = looks.Rain(grid, chars, atlas.coverage, np.random.default_rng(6))
+    for _ in range(20):
+        rain.step(1 / 30)
+    before = rain.trail.copy()
+    taller = looks.Grid(grid.cols, grid.rows + 6, grid.glyph_w, grid.glyph_h)
+    rain.resize(taller)
+    assert rain.trail.shape == (grid.rows + 6, grid.cols) and rain.head.shape == (grid.cols,)
+    assert np.array_equal(rain.trail[:grid.rows], before)
+    narrower = looks.Grid(grid.cols - 10, grid.rows, grid.glyph_w, grid.glyph_h)
+    rain.resize(narrower)
+    assert rain.trail.shape == (grid.rows, grid.cols - 10) and rain.glyph.shape == rain.trail.shape
+    assert rain.speed.shape == (grid.cols - 10,)
+    rain.step(1 / 30)
+    assert rain.paint(np.full((*narrower.sample_size[::-1], 3), 255, np.uint8)).shape[1] == narrower.cols * grid.glyph_w

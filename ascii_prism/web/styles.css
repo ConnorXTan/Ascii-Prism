@@ -116,6 +116,13 @@ button {
 .readout .dot.ok { background: var(--ok); }
 .readout .dot.warn { background: var(--warn); }
 .readout .dot.bad { background: var(--bad); }
+.readout .lens { color: var(--text); }
+.readout .lens:empty { display: none; }
+.readout .lens.flash { animation: lens-flash 1s ease-out; }
+@keyframes lens-flash {
+  from { color: #fff; text-shadow: 0 0 10px rgba(255, 255, 255, 0.7); }
+  to { color: var(--text); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+}
 
 /* Overlays ----------------------------------------------------------------- */
 
@@ -311,6 +318,38 @@ body.chrome-hidden .panel { display: none; }
   margin-top: 10px;
 }
 .row .note { margin: 0; }
+
+/* Lenses */
+.lenses {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.lenses button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  text-align: left;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.lenses button:hover { background: var(--surface-3); }
+.lenses button b { font-size: 12px; font-weight: 600; color: var(--text); }
+.lenses button span { font-size: 11px; line-height: 1.35; color: var(--text-3); }
+.lenses button[aria-checked="true"] { border-color: var(--text); background: var(--surface-3); }
+.lenses button[aria-checked="true"] span { color: var(--text-2); }
+.field[hidden], .switch[hidden] { display: none; }
+.note kbd {
+  font: 11px var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--text-2);
+}
 
 /* Text input */
 input[type="text"] {
@@ -527,5 +566,6 @@ input[type="color"]::-moz-color-swatch { border: 0; border-radius: 5px; }
 
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }
+  .readout .lens.flash { animation: none; }
   .tool, .switch .track, .switch .track::after, .presets button { transition: none; }
 }

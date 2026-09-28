@@ -18,6 +18,7 @@
   const NATURAL_RADIUS = 0.7; // where saturation 100% sits on the colour wheel
 
   const PANEL_KEYS = {
+    lens: ['lens', 'delay', 'person_invert'],
     characters: ['charset_id', 'charset', 'invert'],
     grid: ['columns'],
     colour: ['saturation', 'hue', 'brightness', 'opacity', 'background'],
@@ -32,6 +33,7 @@
     notice: $('notice'),
     connDot: $('conn-dot'),
     connText: $('conn-text'),
+    readoutLens: $('readout-lens'),
     readoutHands: $('readout-hands'),
     readoutGrid: $('readout-grid'),
     readoutPerf: $('readout-perf'),
@@ -39,6 +41,12 @@
     lock: $('lock'),
     fullscreen: $('fullscreen'),
     unhide: $('unhide'),
+    lenses: $('lenses'),
+    delay: $('delay'),
+    delayValue: $('delay-value'),
+    fieldDelay: $('field-delay'),
+    personInvert: $('person-invert'),
+    fieldPersonInvert: $('field-person-invert'),
     presets: $('presets'),
     charset: $('charset'),
     charsetCount: $('charset-count'),
@@ -114,6 +122,7 @@
 
   const percent = (v) => `${Math.round(v * 100)}%`;
   const degrees = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(v))}°`;
+  const seconds = (v) => `${Number(v).toFixed(1)} s`;
 
   // -------------------------------------------------------------- panels
   function openPanel(name) {
@@ -142,6 +151,21 @@
 
   // ------------------------------------------------------------------ ui
   function buildUi() {
+    for (const lens of config.lenses) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.lens = lens.id;
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', 'false');
+      const name = document.createElement('b');
+      name.textContent = lens.label;
+      const blurb = document.createElement('span');
+      blurb.textContent = lens.blurb;
+      button.append(name, blurb);
+      button.addEventListener('click', () => setLens(lens.id));
+      els.lenses.appendChild(button);
+    }
+
     const presetIds = [...config.charsets.map((cs) => cs.id), 'custom'];
     for (const id of presetIds) {
       const cs = config.charsets.find((c) => c.id === id);
@@ -167,6 +191,7 @@
     [els.smoothing.min, els.smoothing.max] = r.smoothing;
     [els.opacity.min, els.opacity.max] = r.opacity;
     [els.brightness.min, els.brightness.max] = r.brightness;
+    [els.delay.min, els.delay.max] = r.delay;
 
     els.charset.addEventListener('input', () => {
       settings.charset = els.charset.value || ' ';
@@ -201,6 +226,12 @@
       els.smoothingValue.value = settings.smoothing.toFixed(2);
       changed();
     });
+    els.delay.addEventListener('input', () => {
+      settings.delay = Number(els.delay.value);
+      els.delayValue.value = seconds(settings.delay);
+      changed();
+    });
+    els.personInvert.addEventListener('change', () => { settings.person_invert = els.personInvert.checked; changed(); });
     els.showTips.addEventListener('change', () => { settings.show_tips = els.showTips.checked; changed(); });
     els.mirror.addEventListener('change', () => { settings.mirror = els.mirror.checked; changed(); });
 
@@ -239,6 +270,8 @@
       if (key === 'l') toggleLock();
       else if (key === 'h') setChromeHidden(!document.body.classList.contains('chrome-hidden'));
       else if (key === 'f') toggleFullscreen();
+      else if (e.key === '[' || e.key === ']') stepLens(e.key === ']' ? 1 : -1);
+      else if (/^[1-9]$/.test(e.key)) pickLens(Number(e.key) - 1);
     });
     window.addEventListener('resize', () => { if (currentPanel() === 'colour') paintWheel(); });
   }
@@ -252,6 +285,7 @@
   }
 
   function syncUi() {
+    syncLenses();
     syncPresets();
     els.charset.value = settings.charset;
     els.charsetCount.textContent = String(levels());
@@ -269,6 +303,55 @@
     els.showTips.checked = settings.show_tips;
     els.mirror.checked = settings.mirror;
     syncWheel();
+  }
+
+  // -------------------------------------------------------------- lenses
+  function lensById(id) {
+    return config.lenses.find((lens) => lens.id === id);
+  }
+
+  function lensLabel(id) {
+    const lens = lensById(id);
+    return lens ? lens.label : '';
+  }
+
+  function setLens(id) {
+    if (!lensById(id) || settings.lens === id) return;
+    settings.lens = id;
+    syncUi();
+    changed();
+    flashLens();
+  }
+
+  function stepLens(direction) {
+    const ids = config.lenses.map((lens) => lens.id);
+    const index = Math.max(0, ids.indexOf(settings.lens));
+    setLens(ids[(index + direction + ids.length) % ids.length]);
+  }
+
+  function pickLens(index) {
+    if (index < config.lenses.length) setLens(config.lenses[index].id);
+  }
+
+  /** Brighten the lens name in the readout for a moment after a switch. */
+  function flashLens() {
+    els.readoutLens.textContent = lensLabel(settings.lens);
+    els.readoutLens.classList.remove('flash');
+    void els.readoutLens.offsetWidth; // restart the animation
+    els.readoutLens.classList.add('flash');
+  }
+
+  function syncLenses() {
+    const lens = lensById(settings.lens);
+    const uses = lens ? lens.uses : [];
+    for (const button of els.lenses.children) {
+      button.setAttribute('aria-checked', String(button.dataset.lens === settings.lens));
+    }
+    els.fieldDelay.hidden = !uses.includes('delay');
+    els.fieldPersonInvert.hidden = !uses.includes('person_invert');
+    els.delay.value = String(settings.delay);
+    els.delayValue.value = seconds(settings.delay);
+    els.personInvert.checked = settings.person_invert;
   }
 
   // ------------------------------------------------------- colour wheel
@@ -439,6 +522,7 @@
   }
 
   function showStatus(msg) {
+    els.readoutLens.textContent = lensLabel(msg.lens);
     els.readoutHands.textContent = `${msg.hands} ${msg.hands === 1 ? 'hand' : 'hands'}`;
     if (msg.grid) {
       els.readoutGrid.textContent = `${msg.grid[0]} × ${msg.grid[1]}${msg.twisted ? ' · twisted' : ''}`;
@@ -446,7 +530,9 @@
       els.rowsNote.textContent = `Right now: ${msg.grid[0]} × ${msg.grid[1]} cells.`;
     } else {
       els.readoutGrid.hidden = true;
-      els.rowsNote.textContent = 'Show both hands to see the grid.';
+      els.rowsNote.textContent = msg.hands >= 2 && !msg.hint
+        ? `${lensLabel(msg.lens)} draws pixels, not characters.`
+        : 'Show both hands to see the grid.';
     }
     els.readoutPerf.textContent = `${lastFps} fps · ${msg.ms} ms`;
     els.readoutPerf.hidden = false;
@@ -609,6 +695,7 @@
     for (const key of Object.keys(config.defaults)) {
       if (key in stored && typeof stored[key] === typeof config.defaults[key]) settings[key] = stored[key];
     }
+    if (!lensById(settings.lens)) settings.lens = config.defaults.lens;
     buildUi();
     syncUi();
     try {

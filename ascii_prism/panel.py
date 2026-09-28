@@ -9,7 +9,8 @@ from tkinter import colorchooser, ttk
 from typing import Callable
 
 from .charsets import CHARSETS, by_id
-from .settings import COLUMNS_RANGE, RANGES, SMOOTHING_RANGE, Settings
+from .lenses import LENSES, by_id as lens_by_id
+from .settings import COLUMNS_RANGE, DELAY_RANGE, RANGES, SMOOTHING_RANGE, Settings
 
 GRADING = (("saturation", "Saturation"), ("hue", "Hue"), ("brightness", "Brightness"), ("opacity", "Opacity"))
 
@@ -36,6 +37,27 @@ class Panel:
         frame = ttk.Frame(self.root, padding=(6, 8))
         frame.grid(sticky="nsew")
 
+        ttk.Label(frame, text="Lens", font=("TkDefaultFont", 10, "bold")).grid(sticky="w", **pad)
+        self.lens_var = tk.StringVar()
+        self.lens_box = ttk.Combobox(frame, textvariable=self.lens_var, state="readonly", width=28,
+                                     values=[lens.label for lens in LENSES])
+        self.lens_box.grid(sticky="ew", **pad)
+        self.lens_box.bind("<<ComboboxSelected>>", self._lens_chosen)
+        self.lens_blurb = ttk.Label(frame, text="", foreground="#666", wraplength=260)
+        self.lens_blurb.grid(sticky="w", **pad)
+        # Lens-specific controls, shown only for the lens that uses them.
+        self.delay_label = ttk.Label(frame, text="")
+        self.delay_label.grid(sticky="w", **pad)
+        self.delay_var = tk.DoubleVar()
+        self.delay_scale = ttk.Scale(frame, from_=DELAY_RANGE[0], to=DELAY_RANGE[1], variable=self.delay_var,
+                                     command=self._delay_moved)
+        self.delay_scale.grid(sticky="ew", **pad)
+        self.person_invert_var = tk.BooleanVar()
+        self.person_invert_check = ttk.Checkbutton(frame, text="Invert the background", variable=self.person_invert_var,
+                                                   command=lambda: self._set("person_invert", self.person_invert_var.get()))
+        self.person_invert_check.grid(sticky="w", **pad)
+
+        ttk.Separator(frame).grid(sticky="ew", pady=6)
         ttk.Label(frame, text="Characters", font=("TkDefaultFont", 10, "bold")).grid(sticky="w", **pad)
         self.preset_var = tk.StringVar()
         self.preset = ttk.Combobox(frame, textvariable=self.preset_var, state="readonly", width=28,
@@ -101,7 +123,7 @@ class Panel:
         ttk.Button(buttons, text="Reset to defaults", command=self._reset).grid(row=0, column=1)
         self.status = ttk.Label(frame, text="", foreground="#666")
         self.status.grid(sticky="w", **pad)
-        ttk.Label(frame, text="Keys in the video window: L lock  H panel  T tips  M mirror  F fullscreen  Q quit",
+        ttk.Label(frame, text="Keys in the video window: [ ] lens  L lock  H panel  T tips  M mirror  F fullscreen  Q quit",
                   foreground="#666", wraplength=260).grid(sticky="w", **pad)
 
     # -------------------------------------------------------------- callbacks
@@ -110,6 +132,33 @@ class Panel:
             return
         setattr(self.settings, name, value)
         self.on_change()
+
+    def _lens_chosen(self, _event=None) -> None:
+        label = self.lens_var.get()
+        for lens in LENSES:
+            if lens.label == label:
+                self.settings.lens = lens.id
+                self._sync_lens_fields()
+                self.on_change()
+                return
+
+    def _delay_moved(self, value) -> None:
+        if self._syncing:
+            return
+        self.settings.delay = round(float(value), 1)
+        self.delay_label.config(text=f"Delay: {self.settings.delay:.1f} s")
+        self.on_change()
+
+    def _sync_lens_fields(self) -> None:
+        lens = lens_by_id(self.settings.lens)
+        uses = lens.uses if lens else ()
+        self.lens_blurb.config(text=lens.blurb if lens else "")
+        for widget, field in ((self.delay_label, "delay"), (self.delay_scale, "delay"),
+                              (self.person_invert_check, "person_invert")):
+            if field in uses:
+                widget.grid()
+            else:
+                widget.grid_remove()
 
     def _preset_chosen(self, _event=None) -> None:
         label = self.preset_var.get()
@@ -189,6 +238,12 @@ class Panel:
         s = self.settings
         self._syncing = True
         try:
+            lens = lens_by_id(s.lens)
+            self.lens_var.set(lens.label if lens else "")
+            self.delay_var.set(s.delay)
+            self.delay_label.config(text=f"Delay: {s.delay:.1f} s")
+            self.person_invert_var.set(s.person_invert)
+            self._sync_lens_fields()
             cs = by_id(s.charset_id)
             self.preset_var.set(cs.label if cs and cs.chars == s.charset else "Custom")
             self.ramp_var.set(s.charset)
