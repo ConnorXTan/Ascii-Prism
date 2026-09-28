@@ -74,6 +74,11 @@ class Lens:
         Returns it with the character grid it used, if any."""
         raise NotImplementedError
 
+    def track_extra(self, frame: np.ndarray, quad, settings: Settings) -> dict | None:
+        """Data a browser that draws this lens itself needs from Python, sent
+        with each tracking answer. `quad` is in `frame`'s pixels. Default: none."""
+        return None
+
     def reset(self) -> None:
         """Forget state: called when the lens is switched away or the camera is mirrored."""
 

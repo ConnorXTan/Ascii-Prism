@@ -1,3 +1,5 @@
+import base64
+
 import cv2
 import numpy as np
 import pytest
@@ -241,3 +243,29 @@ def test_person_lens_keeps_the_room_as_video(renderer, hands_photo):
     assert np.abs(inverted[wall].astype(int) - (255 - photo[wall].astype(int))).mean() < 10
     lens.reset()
     assert lens._mask is None
+
+
+def test_person_lens_sends_the_browser_a_mask(hands_photo):
+    try:
+        looks.ensure_segmenter(log=lambda *_: None)
+    except OSError:
+        pytest.skip("segmentation model unavailable (offline?)")
+    photo = cv2.imread(str(hands_photo))
+    h, w = photo.shape[:2]
+    quad = np.array([[150, 370], [590, 400], [575, 700], [140, 670]], dtype=np.float64)
+    extra = PersonLens().track_extra(photo, quad, Settings(mirror=False))
+    box, (mw, mh) = extra["mask"]["box"], extra["mask"]["size"]
+    assert 0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1
+    assert box[0] < 150 / w and box[2] > 590 / w  # the window plus a margin
+    data = np.frombuffer(base64.b64decode(extra["mask"]["data"]), dtype=np.uint8)
+    assert mw <= 80 and data.size == mw * mh
+    mask = data.reshape(mh, mw)
+    face = mask[int(mh * (500 - box[1] * h) / ((box[3] - box[1]) * h)), int(mw * (300 - box[0] * w) / ((box[2] - box[0]) * w))]
+    assert face > 200
+
+
+def test_other_lenses_send_nothing_extra():
+    frame = np.zeros((240, 320, 3), dtype=np.uint8)
+    for cls in lenses.LENSES:
+        if cls is not PersonLens:
+            assert cls().track_extra(frame, QUAD, Settings()) is None

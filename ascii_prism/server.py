@@ -132,7 +132,7 @@ class Session:
         timestamp_ms = int((time.monotonic() - self.started) * 1000)
         t0 = time.perf_counter()
         result = self.pipeline.track(frame, timestamp_ms)
-        return {
+        out = {
             "type": "track",
             "hands": result.hands,
             "tips": [[round(float(x), 4), round(float(y), 4)] for x, y in result.tips],
@@ -145,8 +145,12 @@ class Session:
             "locked": result.locked,
             "ms": round((time.perf_counter() - t0) * 1000, 1),
         }
+        if result.extra:
+            out.update(result.extra)
+        return out
 
     def close(self) -> None:
+        self.pipeline.reset_tracking()  # lets a lens close what it opened, like the segmenter
         self.tracker.close()
 
 

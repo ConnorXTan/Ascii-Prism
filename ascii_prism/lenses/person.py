@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import sys
 
+import cv2
 import numpy as np
 
 from ..ascii import RegionInfo
@@ -14,6 +16,7 @@ from .base import Lens, LensContext, pixel_sample_size
 from .looks import Grid, PersonMask, ensure_segmenter, grid_for, person_blend
 
 ROI_MARGIN = 0.1  # of the quad's bounding box, on every side
+WEB_MASK_WIDTH = 80  # the mask sent to the browser is at most this wide
 
 
 class PersonLens(Lens):
@@ -47,10 +50,37 @@ class PersonLens(Lens):
         mask_flat = sample_quad(mask, quad, sampled.shape[1], sampled.shape[0])
         return person_blend(glyphs, sampled, mask_flat, settings.person_invert), region_of(grid)
 
+    def track_extra(self, frame: np.ndarray, quad, settings: Settings) -> dict | None:
+        """The person mask around the window for the browser: its box in
+        normalized frame coordinates and a small 8-bit mask, base64."""
+        roi = self._roi(frame, quad)
+        segmenter = self._segmenter() if roi is not None else None
+        if segmenter is None:
+            return None
+        x0, y0, x1, y1 = roi
+        mask = segmenter(frame, roi=roi)[y0:y1, x0:x1]
+        mw = min(WEB_MASK_WIDTH, x1 - x0)
+        mh = max(1, int(round((y1 - y0) * mw / (x1 - x0))))
+        small = cv2.resize(mask, (mw, mh), interpolation=cv2.INTER_AREA)
+        data = (np.clip(small, 0.0, 1.0) * 255 + 0.5).astype(np.uint8)
+        h, w = frame.shape[:2]
+        return {
+            "mask": {
+                "box": [round(x0 / w, 4), round(y0 / h, 4), round(x1 / w, 4), round(y1 / h, 4)],
+                "size": [mw, mh],
+                "data": base64.b64encode(data.tobytes()).decode("ascii"),
+            }
+        }
+
     def _segment(self, frame: np.ndarray, quad) -> np.ndarray | None:
         """A person mask the size of the frame, computed on the quad's
         surroundings only. None when the segmenter cannot be had, in which
         case the lens shows plain characters."""
+        roi = self._roi(frame, quad)
+        segmenter = self._segmenter() if roi is not None else None
+        return None if segmenter is None else segmenter(frame, roi=roi)
+
+    def _segmenter(self) -> PersonMask | None:
         if self._unavailable:
             return None
         if self._mask is None:
@@ -60,6 +90,11 @@ class PersonLens(Lens):
                 print(f"Person lens unavailable ({err}); showing characters instead.", file=sys.stderr)
                 self._unavailable = True
                 return None
+        return self._mask
+
+    @staticmethod
+    def _roi(frame: np.ndarray, quad) -> tuple[int, int, int, int] | None:
+        """The quad's bounding box plus a margin, clipped to the frame."""
         h, w = frame.shape[:2]
         q = np.asarray(quad, dtype=np.float64).reshape(4, 2)
         mx = (q[:, 0].max() - q[:, 0].min()) * ROI_MARGIN
@@ -70,7 +105,7 @@ class PersonLens(Lens):
         y1 = int(min(h, np.ceil(q[:, 1].max() + my)))
         if x1 - x0 < 8 or y1 - y0 < 8:
             return None
-        return self._mask(frame, roi=(x0, y0, x1, y1))
+        return x0, y0, x1, y1
 
     def reset(self) -> None:
         if self._mask is not None:

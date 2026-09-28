@@ -47,6 +47,7 @@ class TrackResult:
     twisted: bool
     hint: str
     locked: bool
+    extra: dict | None = None  # what the active lens needs from Python to be drawn in the browser
 
 
 @dataclass
@@ -119,9 +120,14 @@ class Pipeline:
         return self._lens
 
     def track(self, frame_bgr: np.ndarray, timestamp_ms: int) -> TrackResult:
-        """Find the hands and the window in a camera frame, without rendering."""
+        """Find the hands and the window in a camera frame, without rendering,
+        plus whatever the active lens needs to be drawn elsewhere."""
         frame = cv2.flip(frame_bgr, 1) if self.settings.mirror else frame_bgr
-        return self._track_oriented(frame, timestamp_ms)
+        result = self._track_oriented(frame, timestamp_ms)
+        if result.quad is not None:
+            h, w = frame.shape[:2]
+            result.extra = self.lens.track_extra(frame, result.quad * np.array([w, h], dtype=np.float64), self.settings)
+        return result
 
     def _track_oriented(self, frame: np.ndarray, timestamp_ms: int) -> TrackResult:
         s = self.settings

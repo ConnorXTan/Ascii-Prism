@@ -67,6 +67,7 @@ def test_websocket_round_trip(hands_photo, hand_model):
         ws.send_bytes(jpeg)
         track = ws.receive_json()
         assert track["lens"] == "thermal" and track["hands"] == 2
+        assert "mask" not in track  # only the person lens needs more than geometry
 
         ws.send_json({"type": "lock"})
         assert ws.receive_json() == {"type": "lock", "locked": True}
