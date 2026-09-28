@@ -2,13 +2,15 @@
 # MediaPipe's OpenCV build needs libGL and GLib at import time and the hand
 # landmarker loads EGL and OpenGL ES when a tracker is created, the renderer
 # wants a monospace TrueType font, and the hand model is baked in at build
-# time so a cold start never has to download it.
+# time so a cold start never has to download it (the selfie segmenter for
+# the person lens too).
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    ASCII_PRISM_MODEL=/app/models/hand_landmarker.task
+    ASCII_PRISM_MODEL=/app/models/hand_landmarker.task \
+    ASCII_PRISM_SEGMENTER=/app/models/selfie_segmenter.tflite
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -21,7 +23,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY ascii_prism ./ascii_prism
-RUN python -c "from ascii_prism.model import ensure_model; ensure_model()"
+RUN python -c "from ascii_prism.model import ensure_model, ensure_segmenter; ensure_model(); ensure_segmenter()"
 
 EXPOSE 80
 # Vercel routes traffic to port 80 unless PORT is set in the project settings.

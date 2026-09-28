@@ -14,7 +14,6 @@ supersampled cell grid from `Grid.sample_size`.
 from __future__ import annotations
 
 import os
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +23,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ..ascii import AsciiRenderer
 from ..geometry import quad_size
+from ..model import ensure_segmenter, segmenter_path  # noqa: F401 - re-exported for the tools and tests
 
 LUMA = np.array([0.0722, 0.7152, 0.2126], dtype=np.float32)  # BGR weights
 SUPERSAMPLE = 3  # video samples per cell edge when averaging cell colours
@@ -367,33 +367,6 @@ class Rain:
 
 
 # ------------------------------------------------------------- person
-
-SEGMENTER_URL = (
-    "https://storage.googleapis.com/mediapipe-models/image_segmenter/"
-    "selfie_segmenter/float16/latest/selfie_segmenter.tflite"
-)
-
-
-def segmenter_path() -> Path:
-    """Where the selfie segmenter lives, next to the hand model. To be folded
-    into model.py's model table when the person lens is wired in."""
-    override = os.environ.get("ASCII_PRISM_SEGMENTER")
-    if override:
-        return Path(override)
-    return Path.home() / ".cache" / "ascii-prism" / "selfie_segmenter.tflite"
-
-
-def ensure_segmenter(log=print) -> Path:
-    path = segmenter_path()
-    if path.exists() and path.stat().st_size > 100_000:
-        return path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    log(f"Downloading segmentation model to {path} ...")
-    tmp = path.with_suffix(".part")
-    urllib.request.urlretrieve(SEGMENTER_URL, tmp)
-    tmp.replace(path)
-    return path
-
 
 class PersonMask:
     """MediaPipe selfie segmentation. Calling it returns a float32 mask in
